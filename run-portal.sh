@@ -5,6 +5,20 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$ROOT_DIR"
 
+MODE="${1:-both}"
+
+case "$MODE" in
+  mobile|web|both) ;;
+  *)
+    echo "Usage: ./run-portal.sh [mobile|web|both]"
+    echo ""
+    echo "  mobile  Start Expo for Expo Go / emulator"
+    echo "  web     Start Expo directly in web mode"
+    echo "  both    Start Expo LAN mode for Expo Go, then press w for web"
+    exit 1
+    ;;
+esac
+
 if [ ! -d node_modules ]; then
   echo "Installing dependencies..."
   npm install
@@ -36,6 +50,21 @@ BACKEND_PID=$!
 
 sleep 2
 
-echo "Starting Expo mobile app..."
-echo "Scan the QR code with Expo Go when it appears."
-npx expo start --host lan
+case "$MODE" in
+  mobile)
+    echo "Starting Expo mobile app..."
+    echo "Scan the QR code with Expo Go when it appears."
+    npx expo start --host lan
+    ;;
+  web)
+    echo "Starting Expo web app..."
+    echo "Chrome/web preview will open from the Expo dev server."
+    npx expo start --web --host lan
+    ;;
+  both)
+    echo "Starting Expo for mobile and web..."
+    echo "Scan the QR code with Expo Go for mobile."
+    echo "Press w in this terminal to open the web version."
+    npx expo start --host lan
+    ;;
+esac
