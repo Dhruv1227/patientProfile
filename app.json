@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "CareBridge Patient Portal",
+    "slug": "carebridge-patient-portal",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "splash": {
+      "backgroundColor": "#f7faf8"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ]
+  }
+}
