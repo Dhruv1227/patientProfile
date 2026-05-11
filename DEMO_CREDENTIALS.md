@@ -1,6 +1,6 @@
-# CareBridge Demo Credentials
+# CareBridge Local Test Credentials
 
-All demo accounts use this password:
+All seeded local accounts use this password:
 
 ```text
 portal123
@@ -22,7 +22,7 @@ Default example in the form:
 
 | Role | Name | Login ID | Password |
 | --- | --- | --- | --- |
-| Doctor / Provider | Dr. New Provider | new.provider@care.test | portal123 |
+| Doctor / Provider | Dr. New Provider | new.provider@care.test | TempPass123! |
 
 ## Department Doctor Accounts
 

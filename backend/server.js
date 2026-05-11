@@ -5,7 +5,7 @@ const jwt = require("jsonwebtoken");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const JWT_SECRET = process.env.JWT_SECRET || "carebridge-class-demo-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "carebridge-local-development-secret";
 
 app.use(cors());
 app.use(express.json());
@@ -85,7 +85,7 @@ let auditLogs = [
     actor: "System",
     role: "System",
     action: "Portal started",
-    detail: "CareBridge demo portal initialized.",
+    detail: "CareBridge portal initialized.",
     date: "Today",
     severity: "Info"
   }
@@ -336,6 +336,14 @@ function assignDoctor(departmentId, requestedDoctorId) {
   return { department, doctor, assignment: "Auto-assigned by schedule" };
 }
 
+function providerDoctorIds(user) {
+  if (!user || user.role !== "Provider") return [];
+  return departments
+    .flatMap((department) => department.doctors)
+    .filter((doctor) => doctor.email === user.email || doctor.name === user.name || doctor.id === user.id)
+    .map((doctor) => doctor.id);
+}
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "CareBridge API", time: new Date().toISOString() });
 });
@@ -388,11 +396,20 @@ app.post("/api/auth/register", async (req, res) => {
 
 app.get("/api/portal", requireAuth, (req, res) => {
   const visible = (item) => req.user.role === "Admin" || !item.hidden;
+  const doctorIds = providerDoctorIds(req.user);
+  const appointmentVisibleToUser = (item) => {
+    if (!visible(item)) return false;
+    if (req.user.role === "Admin") return true;
+    if (req.user.role === "Patient") return item.patientId === req.user.id;
+    if (req.user.role === "Provider") return !item.doctorId || doctorIds.includes(item.doctorId);
+    return false;
+  };
+
   res.json({
     user: publicUser(req.user),
     vitals,
     records,
-    appointments: appointments.filter(visible),
+    appointments: appointments.filter(appointmentVisibleToUser),
     messages: messages.filter(visible),
     notifications: notifications.filter((item) => {
       const audienceMatch = item.audience === req.user.role || req.user.role === "Admin";
@@ -473,7 +490,7 @@ app.post("/api/appointments", requireAuth, (req, res) => {
     },
     ...notifications
   ];
-  res.status(201).json({ appointment, appointments });
+  res.status(201).json({ appointment, appointments: appointments.filter((item) => item.patientId === req.user.id), notifications, doctorSchedules });
 });
 
 app.patch("/api/appointments/:id/status", requireAuth, (req, res) => {
@@ -497,8 +514,9 @@ app.patch("/api/appointments/:id/status", requireAuth, (req, res) => {
     {
       id: `n${Date.now()}`,
       audience: "Patient",
+      patientId: appointment.patientId,
       title: `Appointment ${status.toLowerCase()}`,
-      detail: `Dr. Chen ${status.toLowerCase()} your request for ${appointment.title}.`,
+      detail: `${req.user.name} ${status.toLowerCase()} your request for ${appointment.title}.`,
       date: "Just now",
       tag: status,
       hidden: false
@@ -588,7 +606,7 @@ app.post("/api/doctors", requireAuth, async (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   const specialty = String(req.body.specialty || "General Medicine").trim();
   const department = String(req.body.department || "Primary Care").trim();
-  const password = String(req.body.password || "portal123");
+  const password = String(req.body.password || "TempPass123!");
 
   if (!name || !email || password.length < 6) {
     return res.status(400).json({ message: "Doctor name, email, and password with 6+ characters are required." });

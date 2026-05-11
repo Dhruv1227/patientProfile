@@ -1,8 +1,8 @@
 # CareBridge Patient Portal
 
-CareBridge is a professional React Native/Expo patient portal with a local Express backend. It is designed for mobile presentation in Expo Go while also supporting Chrome/web demos.
+CareBridge is a practical React Native/Expo patient portal with a local Express backend. It is designed to run as a mobile-first clinic workflow in Expo Go and as a responsive web portal in Chrome.
 
-The app demonstrates a real-world healthcare workflow across Patient, Doctor/Provider, and Admin roles: appointments, departments, doctor schedules, medical records, secure messages, profile updates, audit logs, and role-based access.
+The app models a real healthcare operation across Patient, Doctor/Provider, and Admin roles: appointment requests, department routing, doctor schedules, medical records, secure messages, profile updates, audit logs, and role-based access.
 
 ## Screenshots
 
@@ -35,6 +35,7 @@ The app demonstrates a real-world healthcare workflow across Patient, Doctor/Pro
 - Department selection
 - Doctor selection
 - Automatic doctor assignment when no doctor is selected
+- Visit readiness checklist and care tasks
 - Notifications after doctor decisions or profile updates
 - Mobile-first bottom tab navigation
 
@@ -47,6 +48,7 @@ The app demonstrates a real-world healthcare workflow across Patient, Doctor/Pro
 - Patient-specific profile update workflow
 - Create new patient profiles
 - View department patient lists
+- Provider work queue and care-gap tasks
 - Provider login accounts for every department doctor
 
 ### Admin Portal
@@ -58,15 +60,16 @@ The app demonstrates a real-world healthcare workflow across Patient, Doctor/Pro
 - Hide/show/change records without deleting data
 - View security and activity audit logs
 - Audit log is read-only and admin-only
+- Operational metrics are calculated from the current clinic workspace
 
 ### Departments and Scheduling
 
-The demo data includes:
+The seeded clinic workspace includes:
 
 - 5 departments
 - 5 patients per department
 - 2 doctors per department
-- 25 synthetic patients
+- 25 realistic patient profiles
 - 10 department doctor accounts
 - Doctor schedules synced with appointment requests
 
@@ -97,7 +100,7 @@ Departments:
 - Express
 - JWT
 - bcryptjs
-- In-memory demo data
+- In-memory local data store
 
 ## Quick Start
 
@@ -107,7 +110,14 @@ Run the backend and Expo app together:
 ./run-portal.sh
 ```
 
-Then scan the QR code with Expo Go.
+Then scan the QR code with Expo Go. Press `w` in the same terminal to open the web version.
+
+You can also run one target directly:
+
+```bash
+./run-portal.sh mobile
+./run-portal.sh web
+```
 
 The launcher script:
 
@@ -115,7 +125,7 @@ The launcher script:
 - starts the backend on `http://localhost:4000`
 - detects your laptop LAN IP
 - sets `EXPO_PUBLIC_API_URL`
-- starts Expo in LAN mode
+- starts Expo in mobile, web, or combined mode
 
 ## Manual Run
 
@@ -143,9 +153,9 @@ Start web preview:
 npm run web
 ```
 
-## Demo Credentials
+## Local Test Credentials
 
-All demo accounts use:
+All local test accounts use:
 
 ```text
 portal123
@@ -189,13 +199,13 @@ PATCH  /api/admin/items/:collection/:id
 App.js                 React Native/Expo mobile app
 backend/server.js      Express API server
 run-portal.sh          One-command backend + Expo launcher
-DEMO_CREDENTIALS.md    Demo login accounts
+DEMO_CREDENTIALS.md    Local test login accounts
 docs/screenshots/      README screenshots
 ```
 
 ## Notes
 
-- Data is stored in memory for classroom/demo use.
+- Data is stored in memory for local development and presentation.
 - Restarting the backend resets runtime-created profiles and requests.
 - `node_modules`, `dist`, `.expo`, and backup files are ignored by git.
 - The app works best on a real phone through Expo Go for presentation.

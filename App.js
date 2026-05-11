@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
   useWindowDimensions
 } from "react-native";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
@@ -29,7 +30,7 @@ const palette = {
   green: "#15803d"
 };
 
-const demoUsers = [
+const seededUsers = [
   {
     id: "u1",
     name: "Maya Patel",
@@ -117,7 +118,7 @@ const profileSeed = {
 };
 
 const auditLogSeed = [
-  { id: "log1", actor: "System", role: "System", action: "Portal started", detail: "CareBridge demo portal initialized.", date: "Today", severity: "Info" }
+  { id: "log1", actor: "System", role: "System", action: "Portal started", detail: "CareBridge portal initialized.", date: "Today", severity: "Info" }
 ];
 
 const departmentSeed = [
@@ -242,6 +243,30 @@ const adminItems = [
   { title: "Provider onboarding", detail: "1 provider account is waiting for supervisor approval.", date: "Tomorrow", tag: "Admin" }
 ];
 
+const operationalTasks = {
+  Patient: [
+    { title: "Complete e-check-in", detail: "Confirm contact details, visit reason, and preferred pharmacy before your next appointment.", date: "Due today", tag: "Check-in" },
+    { title: "Review medication list", detail: "Verify active prescriptions and over-the-counter medications before your visit.", date: "Before visit", tag: "Medication" },
+    { title: "Insurance verification", detail: "Coverage is on file. Upload a new card only if your plan has changed.", date: "Verified", tag: "Coverage" }
+  ],
+  Provider: [
+    { title: "Triage pending requests", detail: "Review patient appointment requests and confirm schedule capacity.", date: "Today", tag: "Queue" },
+    { title: "Sign chart updates", detail: "Finalize care summaries after patient profile changes.", date: "Open", tag: "Charting" },
+    { title: "Review care gaps", detail: "Check patients due for labs, immunizations, or follow-up outreach.", date: "This week", tag: "Care gaps" }
+  ],
+  Admin: [
+    { title: "Verify provider onboarding", detail: "Confirm department assignment, temporary access, and first-login instructions.", date: "Today", tag: "Access" },
+    { title: "Review consent queue", detail: "Validate release-of-information requests before making records visible.", date: "Pending", tag: "Consent" },
+    { title: "Audit access changes", detail: "Review staff and admin changes for privacy compliance.", date: "Daily", tag: "Audit" }
+  ]
+};
+
+const visitReadinessTasks = [
+  { title: "Bring government ID", detail: "Required for in-person visits and first-time check-in.", date: "Visit day", tag: "ID" },
+  { title: "Update medications", detail: "Include prescriptions, supplements, allergies, and recent changes.", date: "Before visit", tag: "Medication" },
+  { title: "Arrive 10 minutes early", detail: "Allows time for check-in, vitals, and rooming.", date: "In person", tag: "Arrival" }
+];
+
 const navByRole = {
   Patient: ["Dashboard", "Appointments", "Messages", "Records", "Search", "Security"],
   Provider: ["Dashboard", "Appointments", "Messages", "Records", "Search", "Security"],
@@ -254,7 +279,7 @@ const actionByRole = {
   Admin: ["Access review", "Audit logs", "Consent queue", "Usage report"]
 };
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.250.26:4000";
+const API_URL = process.env.EXPO_PUBLIC_API_URL || (Platform.OS === "web" ? "http://localhost:4000" : "http://127.0.0.1:4000");
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, {
@@ -274,14 +299,14 @@ async function apiRequest(path, options = {}) {
 }
 
 export default function App() {
-  const [users, setUsers] = useState(demoUsers);
+  const [users, setUsers] = useState(seededUsers);
   const [currentUser, setCurrentUser] = useState(null);
   const [authMode, setAuthMode] = useState("login");
   const [authError, setAuthError] = useState("");
   const [form, setForm] = useState({
     name: "",
-    email: "maya@care.test",
-    password: "portal123",
+    email: "",
+    password: "",
     role: "Patient"
   });
   const [activeTab, setActiveTab] = useState("Dashboard");
@@ -309,10 +334,10 @@ export default function App() {
     email: "new.provider@care.test",
     specialty: "General Medicine",
     department: "Primary Care",
-    password: "portal123"
+    password: "TempPass123!"
   });
   const [authToken, setAuthToken] = useState("");
-  const [apiStatus, setApiStatus] = useState("Demo mode");
+  const [apiStatus, setApiStatus] = useState("Offline continuity mode");
   const [messageDraft, setMessageDraft] = useState("");
   const [appointmentForm, setAppointmentForm] = useState({
     departmentId: "dept-primary",
@@ -395,13 +420,13 @@ export default function App() {
           }
         });
         setAuthToken(data.token);
-        setApiStatus("Backend connected");
+        setApiStatus("Secure API connected");
         setCurrentUser(data.user);
         await loadPortal(data.token);
         setActiveTab("Dashboard");
         return;
       } catch (error) {
-        setApiStatus("Demo mode");
+        setApiStatus("Offline continuity mode");
       }
 
       const newUser = {
@@ -431,13 +456,13 @@ export default function App() {
         }
       });
       setAuthToken(data.token);
-      setApiStatus("Backend connected");
+      setApiStatus("Secure API connected");
       setCurrentUser(data.user);
       await loadPortal(data.token);
       setActiveTab("Dashboard");
       return;
     } catch (error) {
-      setApiStatus("Demo mode");
+      setApiStatus("Offline continuity mode");
     }
 
     const match = users.find((user) => user.email === normalizedEmail && user.password === form.password);
@@ -457,6 +482,8 @@ export default function App() {
       [...selectedDepartment.doctors].sort((a, b) => (doctorSchedules[a.id] || []).length - (doctorSchedules[b.id] || []).length)[0];
     const localAppointment = {
       id: `local-${Date.now()}`,
+      patientId: currentUser.id,
+      patientName: currentUser.name,
       departmentId: selectedDepartment.id,
       departmentName: selectedDepartment.name,
       doctorId: assignedDoctor?.id,
@@ -481,10 +508,10 @@ export default function App() {
         setAppointments(data.appointments);
         setDoctorSchedules(data.doctorSchedules || doctorSchedules);
         setAppointmentForm((current) => ({ ...current, reason: "" }));
-        setApiStatus("Backend connected");
+        setApiStatus("Secure API connected");
         return;
       } catch (error) {
-        setApiStatus("Demo mode");
+        setApiStatus("Offline continuity mode");
       }
     }
 
@@ -525,10 +552,10 @@ export default function App() {
         });
         setMessages(data.messages);
         setMessageDraft("");
-        setApiStatus("Backend connected");
+        setApiStatus("Secure API connected");
         return;
       } catch (error) {
-        setApiStatus("Demo mode");
+        setApiStatus("Offline continuity mode");
       }
     }
 
@@ -550,7 +577,7 @@ export default function App() {
         await loadPortal(authToken);
         return;
       } catch (error) {
-        setApiStatus("Demo mode");
+        setApiStatus("Offline continuity mode");
       }
     }
 
@@ -564,7 +591,7 @@ export default function App() {
     }
     addLocalAudit(`Appointment ${status.toLowerCase()}`, `${currentUser.name} ${status.toLowerCase()} ${target?.title || "appointment request"}.`, "Important");
     setNotifications((current) => [
-      { id: `n-${Date.now()}`, audience: "Patient", title: `Appointment ${status.toLowerCase()}`, detail: `Dr. Chen ${status.toLowerCase()} your request for ${target?.title || "an appointment"}.`, date: "Just now", tag: status, hidden: false },
+      { id: `n-${Date.now()}`, audience: "Patient", patientId: target?.patientId, title: `Appointment ${status.toLowerCase()}`, detail: `${currentUser.name} ${status.toLowerCase()} your request for ${target?.title || "an appointment"}.`, date: "Just now", tag: status, hidden: false },
       ...current
     ]);
   }
@@ -593,7 +620,7 @@ export default function App() {
         await loadPortal(authToken);
         return;
       } catch (error) {
-        setApiStatus("Demo mode");
+        setApiStatus("Offline continuity mode");
       }
     }
 
@@ -629,7 +656,7 @@ export default function App() {
         await loadPortal(authToken);
         return;
       } catch (error) {
-        setApiStatus("Demo mode");
+        setApiStatus("Offline continuity mode");
       }
     }
 
@@ -666,7 +693,7 @@ export default function App() {
         setNewPatientForm((current) => ({ ...current, name: "New Patient", concern: "Initial assessment" }));
         return;
       } catch (error) {
-        setApiStatus("Demo mode");
+        setApiStatus("Offline continuity mode");
       }
     }
 
@@ -707,7 +734,7 @@ export default function App() {
         setNewDoctorForm((current) => ({ ...current, name: "Dr. New Provider", email: "new.provider@care.test" }));
         return;
       } catch (error) {
-        setApiStatus("Demo mode");
+        setApiStatus("Offline continuity mode");
       }
     }
 
@@ -804,12 +831,9 @@ export default function App() {
               <Text style={styles.primaryButtonText}>{authMode === "login" ? "Enter Secure Portal" : "Create Secure Account"}</Text>
             </TouchableOpacity>
 
-            <View style={styles.demoBox}>
-              <Text style={styles.demoTitle}>Quick demo logins</Text>
-              <Text style={styles.demoHint}>Patient: maya@care.test</Text>
-              <Text style={styles.demoHint}>Doctor: dr.chen@care.test</Text>
-              <Text style={styles.demoHint}>Admin: admin@care.test</Text>
-              <Text style={styles.demoHint}>Password: portal123</Text>
+            <View style={styles.accessNotice}>
+              <Text style={styles.accessNoticeTitle}>Authorized access only</Text>
+              <Text style={styles.accessNoticeText}>Use an issued patient, provider, or admin account. Test credentials are documented separately for local training.</Text>
             </View>
           </View>
           </View>
@@ -914,6 +938,7 @@ export default function App() {
               patientProfile={patientProfile}
               departments={departments}
               masked={masked}
+              operationalTasks={operationalTasks[role] || []}
               quickActions={quickActions}
               role={role}
               apiStatus={apiStatus}
@@ -1008,7 +1033,7 @@ export default function App() {
   );
 }
 
-function Dashboard({ appointments, currentUser, messages, notifications, patientProfile, departments, masked, quickActions, role, apiStatus, setActiveTab, setMasked, isWide }) {
+function Dashboard({ appointments, currentUser, messages, notifications, patientProfile, departments, masked, operationalTasks, quickActions, role, apiStatus, setActiveTab, setMasked, isWide }) {
   const firstName = currentUser.name.split(" ")[0];
   const totalPatients = departments.reduce((sum, department) => sum + department.patients.length, 0);
 
@@ -1081,6 +1106,7 @@ function Dashboard({ appointments, currentUser, messages, notifications, patient
 
       <View style={[styles.workspaceGrid, isWide && styles.workspaceGridWide]}>
         <Panel title={role === "Provider" ? "Doctor Requests" : "Upcoming Appointments"} items={appointments.filter((item) => role === "Admin" || !item.hidden).slice(0, 3)} action="Open scheduler" onAction={() => setActiveTab("Appointments")} />
+        <Panel title="Operational Tasks" items={operationalTasks} action={role === "Patient" ? "Open visits" : "Open records"} onAction={() => setActiveTab(role === "Patient" ? "Appointments" : "Records")} />
         <Panel title="Notifications" items={notifications.filter((item) => role === "Admin" || item.audience === role).slice(0, 3)} action="Open messages" onAction={() => setActiveTab("Messages")} />
         {role !== "Patient" ? <DepartmentPanel departments={departments} /> : null}
         <View style={styles.panel}>
@@ -1160,7 +1186,7 @@ function AppointmentsView({ appointmentForm, appointments, departments, doctorSc
           <View style={styles.panel}>
             <Text style={styles.panelTitle}>Request Appointment</Text>
             <Text style={styles.inputLabel}>Department</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            <ScrollView horizontal style={styles.filterScroller} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
               {departments.map((department) => (
                 <TouchableOpacity
                   key={department.id}
@@ -1172,7 +1198,7 @@ function AppointmentsView({ appointmentForm, appointments, departments, doctorSc
               ))}
             </ScrollView>
             <Text style={styles.inputLabel}>Doctor</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            <ScrollView horizontal style={styles.filterScroller} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
               <TouchableOpacity style={[styles.filterPill, !appointmentForm.doctorId && styles.filterPillActive]} onPress={() => setAppointmentForm((current) => ({ ...current, doctorId: "" }))}>
                 <Text style={[styles.filterText, !appointmentForm.doctorId && styles.filterTextActive]}>Auto assign</Text>
               </TouchableOpacity>
@@ -1203,6 +1229,7 @@ function AppointmentsView({ appointmentForm, appointments, departments, doctorSc
             </TouchableOpacity>
           </View>
         )}
+        {role === "Patient" ? <Panel title="Visit Readiness" items={visitReadinessTasks} /> : null}
         <Panel title="Visit Timeline" items={visibleAppointments} />
         {role !== "Patient" ? <Panel title="Synced Doctor Schedules" items={scheduleItems.slice(0, 12)} /> : null}
       </View>
@@ -1269,7 +1296,7 @@ function RecordsView({
         {role === "Provider" || role === "Admin" ? (
           <>
             <Text style={styles.inputLabel}>Select patient to update</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            <ScrollView horizontal style={styles.filterScroller} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
               {allPatients.map((patient) => (
                 <TouchableOpacity
                   key={patient.id}
@@ -1304,7 +1331,7 @@ function RecordsView({
           <Field label="Next visit" value={newPatientForm.nextVisit} onChangeText={(value) => setNewPatientForm((current) => ({ ...current, nextVisit: value }))} />
           <Field label="Concern" value={newPatientForm.concern} onChangeText={(value) => setNewPatientForm((current) => ({ ...current, concern: value }))} />
           <Text style={styles.inputLabel}>Department</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          <ScrollView horizontal style={styles.filterScroller} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
             {departments.map((department) => (
               <TouchableOpacity
                 key={department.id}
@@ -1344,7 +1371,7 @@ function SearchView({ filter, filteredItems, query, setFilter, setQuery }) {
         placeholder="Search labs, cardiology, billing, privacy..."
         placeholderTextColor="#82918d"
       />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+      <ScrollView horizontal style={styles.filterScroller} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         {filters.map((option) => (
           <TouchableOpacity key={option} style={[styles.filterPill, filter === option && styles.filterPillActive]} onPress={() => setFilter(option)}>
             <Text style={[styles.filterText, filter === option && styles.filterTextActive]}>{option}</Text>
@@ -1399,11 +1426,12 @@ function SecurityView({ currentUser, auditLogs, masked, role, setMasked, mfaEnab
 
 function AdminView({ appointments, auditLogs, departments, messages, notifications, newDoctorForm, setNewDoctorForm, createDoctorProfile, adminToggleHidden, adminChangeText }) {
   const totalPatients = departments.reduce((sum, department) => sum + department.patients.length, 0);
+  const totalDoctors = departments.reduce((sum, department) => sum + (department.doctors || []).length, 0);
   return (
     <View style={styles.screen}>
       <PageHeader title="Admin Panel" subtitle="Admin can hide/show or change portal content. Nothing is deleted." />
       <View style={styles.metricGrid}>
-        <MiniMetric label="Active users" value="1,284" />
+        <MiniMetric label="Active users" value={String(totalPatients + totalDoctors + 1)} />
         <MiniMetric label="Departments" value={String(departments.length)} />
         <MiniMetric label="Patients" value={String(totalPatients)} />
         <MiniMetric label="Hidden items" value={String([...appointments, ...messages, ...notifications].filter((item) => item.hidden).length)} />
@@ -1720,7 +1748,7 @@ const styles = StyleSheet.create({
     color: palette.rose,
     fontWeight: "700"
   },
-  demoBox: {
+  accessNotice: {
     backgroundColor: palette.softer,
     borderRadius: 8,
     borderWidth: 1,
@@ -1728,13 +1756,14 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 3
   },
-  demoTitle: {
+  accessNoticeTitle: {
     color: palette.ink,
     fontWeight: "900"
   },
-  demoHint: {
+  accessNoticeText: {
     color: palette.muted,
-    fontWeight: "800"
+    fontWeight: "700",
+    lineHeight: 19
   },
   appShell: {
     flex: 1,
@@ -2188,17 +2217,25 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 16
   },
+  filterScroller: {
+    minHeight: 50,
+    maxHeight: 54
+  },
   filterRow: {
     gap: 8,
-    paddingVertical: 2
+    paddingVertical: 2,
+    minHeight: 48,
+    alignItems: "center"
   },
   filterPill: {
+    minHeight: 40,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: palette.line,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    backgroundColor: palette.surface
+    backgroundColor: palette.surface,
+    justifyContent: "center"
   },
   filterPillActive: {
     backgroundColor: palette.ink,
