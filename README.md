@@ -1,8 +1,8 @@
 # CareBridge Patient Portal
 
-CareBridge is a practical React Native/Expo patient portal with a local Express backend. It is designed to run as a mobile-first clinic workflow in Expo Go and as a responsive web portal in Chrome.
+CareBridge is a mobile-first patient portal built with React Native, Expo, and a local Express backend. I built it to feel closer to a working clinic application than a static class demo: patients can request appointments, doctors can manage their own department workflow, and admins can oversee the portal without deleting clinical history.
 
-The app models a real healthcare operation across Patient, Doctor/Provider, and Admin roles: appointment requests, department routing, doctor schedules, medical records, secure messages, profile updates, audit logs, and role-based access.
+The app works in Expo Go, Android/iOS simulators, and Chrome through React Native Web.
 
 ## Screenshots
 
@@ -14,82 +14,56 @@ The app models a real healthcare operation across Patient, Doctor/Provider, and 
 | --- | --- |
 | <img src="docs/screenshots/patient-appointments-mobile.png" width="260" alt="Appointment booking screen" /> | <img src="docs/screenshots/admin-panel-mobile.png" width="260" alt="Admin panel screen" /> |
 
-## Feature Overview
+## What The App Does
 
-### Authentication and Roles
+CareBridge has three connected portals.
 
-- Patient, Doctor/Provider, and Admin login
-- User registration with role selection
-- JWT-based backend authentication
-- bcrypt password hashing
-- Role-specific dashboards and navigation
-- Protected admin-only audit logs
+Patients can sign in, view their dashboard, search portal content, read medical records, send secure messages, and request appointments. When booking a visit, the patient can choose a department and doctor, or leave the doctor blank so the system can assign one based on schedule availability.
 
-### Patient Portal
+Doctors get a provider dashboard for their assigned department. They can review patient appointment requests, approve or reject them, update patient care summaries, create new patient profiles, and request a department transfer when a patient needs another care team.
 
-- Personalized patient dashboard
-- Medical records and health profile
-- Vitals summary
-- Secure message center
-- Appointment booking
-- Department selection
-- Doctor selection
-- Automatic doctor assignment when no doctor is selected
-- Visit readiness checklist and care tasks
-- Notifications after doctor decisions or profile updates
-- Mobile-first bottom tab navigation
+Admins can see the operational side of the portal. They can create doctor accounts, review audit activity, hide or show portal content, and change records without deleting them. The audit log is intentionally read-only for everyone except admin users.
 
-### Doctor / Provider Portal
+## Main Features
 
-- Doctor dashboard
-- Patient appointment request queue
-- Approve or reject appointment requests
-- Synced schedule updates after decisions
-- Patient-specific profile update workflow
-- Create new patient profiles
-- View department patient lists
-- Provider work queue and care-gap tasks
-- Provider login accounts for every department doctor
+- Patient, doctor/provider, and admin login
+- User registration for local testing
+- JWT authentication on the backend
+- Password hashing with bcrypt
+- Session restore after browser refresh
+- Inactivity auto-lock
+- Role-based dashboards and navigation
+- Patient appointment requests
+- Doctor approve/reject workflow
+- Doctor schedule conflict checks
+- Auto-assignment when a patient does not choose a doctor
+- Secure messages scoped by role
+- Medical records scoped by patient, doctor, and admin permissions
+- Patient profile updates with patient notifications
+- Department transfer request workflow
+- Admin-only audit log
+- Admin hide/show/change controls with no delete action
+- Local JSON persistence for demo data
+- Mobile, tablet, and web responsive layout
+- Screenshot automation for README images
 
-### Admin Portal
+## Clinic Data Included
 
-- Full admin dashboard
-- Department and patient overview
-- Create new doctor/provider profiles
-- Manage appointments, messages, and notifications
-- Hide/show/change records without deleting data
-- View security and activity audit logs
-- Audit log is read-only and admin-only
-- Operational metrics are calculated from the current clinic workspace
-
-### Departments and Scheduling
-
-The seeded clinic workspace includes:
+The demo starts with a realistic clinic workspace:
 
 - 5 departments
-- 5 patients per department
 - 2 doctors per department
-- 25 realistic patient profiles
-- 10 department doctor accounts
-- Doctor schedules synced with appointment requests
+- 5 patients per department
+- 25 department patients
+- seeded appointments, messages, records, schedules, and notifications
 
-Departments:
+Departments included:
 
 - Primary Care
 - Cardiology
 - Pediatrics
 - Dermatology
 - Mental Health
-
-### UI and Design
-
-- Mobile-first interface for Expo Go
-- Responsive web/tablet layout
-- Animated login screen
-- Animated screen transitions
-- Animated cards, panels, metrics, tabs, and buttons
-- Professional healthcare-style layout
-- Clean simplified login page
 
 ## Tech Stack
 
@@ -98,64 +72,79 @@ Departments:
 - React Native Web
 - Node.js
 - Express
-- JWT
+- JSON Web Tokens
 - bcryptjs
-- In-memory local data store
+- Local JSON file persistence
 
-## Quick Start
+## Run The Project
 
-Run the backend and Expo app together:
+The easiest way to run everything is:
 
 ```bash
 ./run-portal.sh
 ```
 
-Then scan the QR code with Expo Go. Press `w` in the same terminal to open the web version.
+That script starts the backend and Expo together. Scan the QR code with Expo Go for the mobile app, or press `w` in the terminal to open the web version.
 
-You can also run one target directly:
+You can also choose one mode:
 
 ```bash
 ./run-portal.sh mobile
 ./run-portal.sh web
 ```
 
-The launcher script:
+The script will install dependencies if needed, start the backend on `http://localhost:4000`, detect your LAN IP for Expo Go, and set `EXPO_PUBLIC_API_URL` for the app.
 
-- installs dependencies if missing
-- starts the backend on `http://localhost:4000`
-- detects your laptop LAN IP
-- sets `EXPO_PUBLIC_API_URL`
-- starts Expo in mobile, web, or combined mode
-
-## Manual Run
-
-Install dependencies:
+## Manual Commands
 
 ```bash
 npm install
-```
-
-Start backend:
-
-```bash
 npm run backend
-```
-
-Start Expo:
-
-```bash
 npm start
 ```
 
-Start web preview:
+For web only:
 
 ```bash
 npm run web
 ```
 
-## Local Test Credentials
+For validation:
 
-All local test accounts use:
+```bash
+npm run check:api
+npm run build:web
+npm run test:workflows
+```
+
+To regenerate README screenshots:
+
+```bash
+npm run screenshots
+```
+
+## Local Configuration
+
+Create a local `.env` file from the example if you want to change ports or secrets:
+
+```bash
+cp .env.example .env
+```
+
+Supported values:
+
+```text
+PORT=4000
+JWT_SECRET=replace-with-a-long-random-secret
+DATA_FILE=backend/data/portal-state.json
+EXPO_PUBLIC_API_URL=http://localhost:4000
+```
+
+Runtime data is stored in `backend/data/portal-state.json`. That file is ignored by git so local testing changes do not get uploaded.
+
+## Demo Logins
+
+All seeded local accounts use this password:
 
 ```text
 portal123
@@ -169,13 +158,9 @@ Doctor: dr.chen@care.test
 Admin: admin@care.test
 ```
 
-All department patient and doctor accounts are listed in:
+All doctor and patient accounts are listed in [DEMO_CREDENTIALS.md](DEMO_CREDENTIALS.md).
 
-```text
-DEMO_CREDENTIALS.md
-```
-
-## Backend API
+## API Routes
 
 ```text
 GET    /api/health
@@ -189,6 +174,8 @@ PATCH  /api/appointments/:id/status
 POST   /api/messages
 PATCH  /api/patient-profile
 POST   /api/patients
+PATCH  /api/patients/:id/transfer
+PATCH  /api/transfers/:id/status
 POST   /api/doctors
 PATCH  /api/admin/items/:collection/:id
 ```
@@ -196,16 +183,24 @@ PATCH  /api/admin/items/:collection/:id
 ## Project Structure
 
 ```text
-App.js                 React Native/Expo mobile app
-backend/server.js      Express API server
-run-portal.sh          One-command backend + Expo launcher
-DEMO_CREDENTIALS.md    Local test login accounts
-docs/screenshots/      README screenshots
+App.js                         App shell, auth flow, shared state, navigation
+src/data/portalSeed.js         Seed users, departments, records, tasks
+src/screens/PortalScreens.js   Patient, provider, and admin screens
+src/components/common.js       Shared cards, fields, panels, toggles
+src/services/api.js            API URL and fetch helper
+src/services/sessionStorage.js Browser session persistence helper
+src/utils/roleScope.js         Role scoping helpers
+src/styles.js                  Shared React Native styles
+backend/server.js              Express API server
+run-portal.sh                  One-command backend and Expo launcher
+tools/capture-screenshots.mjs  Screenshot automation
+docs/ARCHITECTURE.md           Expansion notes
+docs/WORKFLOW_AND_GAPS.md      Workflow map and gap analysis
+docs/screenshots/              README screenshots
 ```
 
 ## Notes
 
-- Data is stored in memory for local development and presentation.
-- Restarting the backend resets runtime-created profiles and requests.
-- `node_modules`, `dist`, `.expo`, and backup files are ignored by git.
-- The app works best on a real phone through Expo Go for presentation.
+This is a demo/training portal. It uses synthetic data only and should not be used with real patient information.
+
+Generated folders such as `node_modules`, `dist`, `.expo`, backend runtime data, and archived backup files are intentionally ignored by git.

@@ -54,17 +54,17 @@ case "$MODE" in
   mobile)
     echo "Starting Expo mobile app..."
     echo "Scan the QR code with Expo Go when it appears."
-    npx expo start --host lan
+    npx expo start --clear --host lan
     ;;
   web)
     echo "Starting Expo web app..."
     echo "Chrome/web preview will open from the Expo dev server."
-    npx expo start --web --host lan
+    npx expo start --web --clear --host lan
     ;;
   both)
     echo "Starting Expo for mobile and web..."
     echo "Scan the QR code with Expo Go for mobile."
     echo "Press w in this terminal to open the web version."
-    npx expo start --host lan
+    npx expo start --clear --host lan
     ;;
 esac

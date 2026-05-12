@@ -2,6 +2,9 @@ node_modules/
 dist/
 .expo/
 unused_files/
+backend/data/
+.env
+.env.local
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

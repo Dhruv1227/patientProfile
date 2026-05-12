@@ -2,10 +2,30 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const fs = require("fs");
+const path = require("path");
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+
+  for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) continue;
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed.slice(separator + 1).trim().replace(/^['"]|['"]$/g, "");
+    if (key && process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+loadEnvFile(path.resolve(process.cwd(), ".env"));
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || "carebridge-local-development-secret";
+const DATA_FILE = path.resolve(process.cwd(), process.env.DATA_FILE || path.join("backend", "data", "portal-state.json"));
+const STATE_VERSION = 1;
 
 app.use(cors());
 app.use(express.json());
@@ -50,11 +70,12 @@ const users = [
 ];
 
 let appointments = [
-  { id: "a1", patientId: "u1", title: "Video follow-up", detail: "Medication review with Dr. Lena Chen", date: "May 18, 2026, 9:30 AM", location: "Virtual visit", tag: "Confirmed", status: "Approved", hidden: false },
-  { id: "a2", patientId: "u1", title: "Cardiology consult", detail: "Referral appointment for preventive screening", date: "Jun 4, 2026, 2:00 PM", location: "North Clinic, Suite 204", tag: "In person", status: "Approved", hidden: false },
-  { id: "a3", patientId: "u1", title: "Vaccination reminder", detail: "Flu booster eligibility opens this fall", date: "Sep 12, 2026", location: "Student health center", tag: "Reminder", status: "Scheduled", hidden: false },
-  { id: "a4", patientId: "u1", title: "Nutrition counselling", detail: "Review meal planning for cholesterol management.", date: "Jun 14, 2026, 11:15 AM", location: "Wellness Clinic, Room 118", tag: "Confirmed", status: "Approved", hidden: false },
-  { id: "a5", patientId: "u1", title: "Dermatology referral", detail: "Skin irritation follow-up after primary care visit.", date: "Jul 2, 2026, 3:45 PM", location: "Specialty Care Centre", tag: "Referral", status: "Pending", hidden: false }
+  { id: "a1", patientId: "u1", patientName: "Maya Patel", departmentId: "dept-primary", departmentName: "Primary Care", doctorId: "d1001", doctorName: "Dr. Lena Chen", assignment: "Selected by patient", title: "Video follow-up", detail: "Medication review with Dr. Lena Chen", date: "May 18, 2026, 9:30 AM", location: "Virtual visit", tag: "Confirmed", status: "Approved", hidden: false },
+  { id: "a2", patientId: "u1", patientName: "Maya Patel", departmentId: "dept-cardiology", departmentName: "Cardiology", doctorId: "d2001", doctorName: "Dr. Marcus Reed", assignment: "Referral routing", title: "Cardiology consult", detail: "Referral appointment for preventive screening", date: "Jun 4, 2026, 2:00 PM", location: "North Clinic, Suite 204", tag: "In person", status: "Approved", hidden: false },
+  { id: "a3", patientId: "u1", patientName: "Maya Patel", departmentId: "dept-primary", departmentName: "Primary Care", doctorId: "d1001", doctorName: "Dr. Lena Chen", assignment: "Care team reminder", title: "Vaccination reminder", detail: "Flu booster eligibility opens this fall", date: "Sep 12, 2026", location: "Student health center", tag: "Reminder", status: "Scheduled", hidden: false },
+  { id: "a4", patientId: "u1", patientName: "Maya Patel", departmentId: "dept-primary", departmentName: "Primary Care", doctorId: "d1002", doctorName: "Dr. Victor Sloan", assignment: "Auto-assigned by schedule", title: "Nutrition counselling", detail: "Review meal planning for cholesterol management.", date: "Jun 14, 2026, 11:15 AM", location: "Wellness Clinic, Room 118", tag: "Confirmed", status: "Approved", hidden: false },
+  { id: "a5", patientId: "u1", patientName: "Maya Patel", departmentId: "dept-dermatology", departmentName: "Dermatology", doctorId: "d4001", doctorName: "Dr. Naomi Brooks", assignment: "Referral routing", title: "Dermatology referral", detail: "Skin irritation follow-up after primary care visit.", date: "Jul 2, 2026, 3:45 PM", location: "Specialty Care Centre", tag: "Referral", status: "Pending", hidden: false },
+  { id: "a6", patientId: "p3001", patientName: "Mia Anderson", departmentId: "dept-pediatrics", departmentName: "Pediatrics", doctorId: "d3001", doctorName: "Dr. Priya Shah", assignment: "Selected by patient", title: "Pediatric vaccination visit", detail: "Vaccination visit and growth chart review.", date: "May 21, 2026, 10:00 AM", location: "Family Wing, Floor 2", tag: "Requested", status: "Pending", hidden: false }
 ];
 
 let messages = [
@@ -67,17 +88,22 @@ let messages = [
 
 let notifications = [
   { id: "n1", audience: "Patient", title: "Welcome back", detail: "Your CareBridge portal is ready.", date: "Today", tag: "Info", hidden: false },
-  { id: "n2", audience: "Provider", title: "Pending appointment request", detail: "Maya Patel has 1 appointment request waiting for review.", date: "Today", tag: "Request", hidden: false }
+  { id: "n2", audience: "Provider", doctorId: "d3001", title: "Pending appointment request", detail: "Mia Anderson has 1 pediatric appointment request waiting for review.", date: "Today", tag: "Request", hidden: false }
 ];
 
 let patientProfile = {
   patientId: "u1",
+  patientName: "Maya Patel",
   summary: "Stable health profile. Seasonal allergies active. Preventive care plan reviewed.",
   riskLevel: "Low",
   lastUpdatedBy: "Dr. Lena Chen",
   updatedAt: "Apr 18, 2026",
   hidden: false
 };
+
+let patientProfiles = {};
+let patientRecords = [];
+let transfers = [];
 
 let auditLogs = [
   {
@@ -90,6 +116,46 @@ let auditLogs = [
     severity: "Info"
   }
 ];
+
+let persistenceReady = false;
+let saveTimer = null;
+
+function serializableState() {
+  return {
+    version: STATE_VERSION,
+    savedAt: new Date().toISOString(),
+    users,
+    appointments,
+    messages,
+    notifications,
+    patientProfile,
+    patientProfiles,
+    patientRecords,
+    transfers,
+    auditLogs,
+    departments,
+    doctorSchedules
+  };
+}
+
+function saveStateNow() {
+  if (!persistenceReady) return;
+
+  try {
+    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+    const tempFile = `${DATA_FILE}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(serializableState(), null, 2));
+    fs.renameSync(tempFile, DATA_FILE);
+  } catch (error) {
+    console.warn(`Unable to persist portal state: ${error.message}`);
+  }
+}
+
+function queueSave() {
+  if (!persistenceReady) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveStateNow, 50);
+}
 
 function addAuditLog(user, action, detail, severity = "Info") {
   const actor = user ? user.name : "System";
@@ -106,6 +172,7 @@ function addAuditLog(user, action, detail, severity = "Info") {
     },
     ...auditLogs
   ].slice(0, 100);
+  queueSave();
 }
 
 const records = [
@@ -289,6 +356,149 @@ const departmentPatientUsers = departments.flatMap((department) =>
 
 users.push(...departmentDoctorUsers.filter((doctor) => !users.some((user) => user.email === doctor.email)), ...departmentPatientUsers);
 
+function allPatientsWithDepartment() {
+  return departments.flatMap((department) =>
+    department.patients.map((patient) => ({ ...patient, departmentId: department.id, departmentName: department.name, departmentLead: department.lead }))
+  );
+}
+
+function defaultProfileForPatient(patient) {
+  return {
+    patientId: patient.id,
+    patientName: patient.name,
+    summary: `${patient.concern}. Status: ${patient.status}. Next visit: ${patient.nextVisit}.`,
+    riskLevel: patient.status === "High priority" ? "High" : patient.status === "Pending labs" || patient.status === "Pending imaging" ? "Medium" : "Low",
+    lastUpdatedBy: patient.departmentLead || "CareBridge",
+    updatedAt: patient.nextVisit || "Current",
+    hidden: false
+  };
+}
+
+function recordsForPatient(patient) {
+  const provider = patient.departmentLead || "CareBridge";
+  return [
+    {
+      id: `rec-${patient.id}-visit`,
+      patientId: patient.id,
+      patientName: patient.name,
+      departmentId: patient.departmentId,
+      type: "Visit",
+      title: `${patient.concern} visit`,
+      detail: `Clinical note for ${patient.name}: ${patient.concern}. Current status is ${patient.status}.`,
+      date: patient.nextVisit || "Current",
+      provider,
+      tag: patient.status,
+      hidden: false
+    },
+    {
+      id: `rec-${patient.id}-care-plan`,
+      patientId: patient.id,
+      patientName: patient.name,
+      departmentId: patient.departmentId,
+      type: "Care plan",
+      title: `${patient.departmentName} care plan`,
+      detail: `Care team: ${provider}. Follow-up plan is aligned with ${patient.concern.toLowerCase()}.`,
+      date: "Active",
+      provider,
+      tag: "Plan",
+      hidden: false
+    }
+  ];
+}
+
+function initializeClinicalState() {
+  const patients = allPatientsWithDepartment();
+  patientProfiles = patients.reduce((profiles, patient) => {
+    profiles[patient.id] = defaultProfileForPatient(patient);
+    return profiles;
+  }, {});
+  patientProfiles.u1 = {
+    ...patientProfile,
+    patientId: "u1",
+    patientName: "Maya Patel"
+  };
+  patientRecords = [
+    ...records.map((record, index) => ({
+      ...record,
+      id: `rec-u1-${index}`,
+      patientId: "u1",
+      patientName: "Maya Patel",
+      departmentId: "dept-primary",
+      hidden: false
+    })),
+    ...patients.flatMap(recordsForPatient)
+  ];
+  messages = normalizeMessages(messages);
+}
+
+function normalizeMessages(items) {
+  return items.map((message, index) => ({
+    patientId: "u1",
+    patientName: "Maya Patel",
+    departmentId: "dept-primary",
+    doctorId: "d1001",
+    senderRole: index === 1 ? "Admin" : "Provider",
+    receiverRole: "Patient",
+    ...message
+  }));
+}
+
+function ensureClinicalCoverage() {
+  const existingRecordKeys = new Set(patientRecords.map((record) => `${record.patientId}:${record.type}:${record.title}`));
+  for (const patient of allPatientsWithDepartment()) {
+    if (!patientProfiles[patient.id]) patientProfiles[patient.id] = defaultProfileForPatient(patient);
+    const missingRecords = recordsForPatient(patient).filter((record) => !existingRecordKeys.has(`${record.patientId}:${record.type}:${record.title}`));
+    patientRecords = [...patientRecords, ...missingRecords];
+  }
+  if (!patientProfiles.u1) {
+    patientProfiles.u1 = {
+      ...patientProfile,
+      patientId: "u1",
+      patientName: "Maya Patel"
+    };
+  }
+  patientRecords = patientRecords.map((record, index) => ({
+    id: record.id || `rec-${record.patientId || "unknown"}-${index}`,
+    hidden: false,
+    ...record
+  }));
+  messages = normalizeMessages(messages);
+}
+
+initializeClinicalState();
+
+function hydrateFromDisk() {
+  if (!fs.existsSync(DATA_FILE)) return false;
+
+  try {
+    const state = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    if (!state || typeof state !== "object") return false;
+
+    if (Array.isArray(state.users)) {
+      users.splice(0, users.length, ...state.users);
+    }
+    if (Array.isArray(state.appointments)) appointments = state.appointments;
+    if (Array.isArray(state.messages)) messages = normalizeMessages(state.messages);
+    if (Array.isArray(state.notifications)) notifications = state.notifications;
+    if (state.patientProfile && typeof state.patientProfile === "object") patientProfile = state.patientProfile;
+    if (state.patientProfiles && typeof state.patientProfiles === "object") patientProfiles = { ...patientProfiles, ...state.patientProfiles };
+    if (Array.isArray(state.patientRecords)) patientRecords = state.patientRecords;
+    if (Array.isArray(state.transfers)) transfers = state.transfers;
+    if (Array.isArray(state.auditLogs)) auditLogs = state.auditLogs;
+    if (Array.isArray(state.departments)) departments = state.departments;
+    if (state.doctorSchedules && typeof state.doctorSchedules === "object") doctorSchedules = state.doctorSchedules;
+    return true;
+  } catch (error) {
+    console.warn(`Unable to load portal state. Seed data will be used. ${error.message}`);
+    return false;
+  }
+}
+
+const restoredState = hydrateFromDisk();
+ensureClinicalCoverage();
+persistenceReady = true;
+if (!restoredState) saveStateNow();
+
 function publicUser(user) {
   const { passwordHash, ...safeUser } = user;
   return safeUser;
@@ -327,12 +537,33 @@ function findDepartment(id) {
   return departments.find((department) => department.id === id) || departments[0];
 }
 
-function assignDoctor(departmentId, requestedDoctorId) {
+function doctorHasConflict(doctorId, requestedDate) {
+  if (!requestedDate) return false;
+  return (doctorSchedules[doctorId] || []).some(
+    (slot) => slot.date === requestedDate && !["Open", "Rejected", "Cancelled"].includes(slot.status)
+  );
+}
+
+function assignDoctor(departmentId, requestedDoctorId, requestedDate) {
   const department = findDepartment(departmentId);
   const requestedDoctor = department.doctors.find((doctor) => doctor.id === requestedDoctorId);
-  if (requestedDoctor) return { department, doctor: requestedDoctor, assignment: "Selected by patient" };
+  if (requestedDoctor) {
+    if (doctorHasConflict(requestedDoctor.id, requestedDate)) {
+      const error = new Error(`${requestedDoctor.name} already has a scheduled item at ${requestedDate}.`);
+      error.status = 409;
+      throw error;
+    }
+    return { department, doctor: requestedDoctor, assignment: "Selected by patient" };
+  }
 
-  const doctor = [...department.doctors].sort((a, b) => (doctorSchedules[a.id] || []).length - (doctorSchedules[b.id] || []).length)[0];
+  const doctor = [...department.doctors]
+    .filter((candidate) => !doctorHasConflict(candidate.id, requestedDate))
+    .sort((a, b) => (doctorSchedules[a.id] || []).length - (doctorSchedules[b.id] || []).length)[0];
+  if (!doctor) {
+    const error = new Error(`No doctors are available in ${department.name} at ${requestedDate}.`);
+    error.status = 409;
+    throw error;
+  }
   return { department, doctor, assignment: "Auto-assigned by schedule" };
 }
 
@@ -342,6 +573,134 @@ function providerDoctorIds(user) {
     .flatMap((department) => department.doctors)
     .filter((doctor) => doctor.email === user.email || doctor.name === user.name || doctor.id === user.id)
     .map((doctor) => doctor.id);
+}
+
+function providerDepartmentIds(user) {
+  const doctorIds = providerDoctorIds(user);
+  return departments
+    .filter((department) => department.doctors.some((doctor) => doctorIds.includes(doctor.id)))
+    .map((department) => department.id);
+}
+
+function canProviderAccessPatient(user, patientId) {
+  if (user.role === "Admin") return true;
+  if (user.role !== "Provider") return false;
+  const departmentIds = providerDepartmentIds(user);
+  return departments.some((department) =>
+    departmentIds.includes(department.id) && department.patients.some((patient) => patient.id === patientId)
+  );
+}
+
+function canManageAppointment(user, appointment) {
+  if (!appointment) return false;
+  if (user.role === "Admin") return true;
+  if (user.role !== "Provider") return false;
+  return providerDoctorIds(user).includes(appointment.doctorId);
+}
+
+function findPatientDepartment(patientId) {
+  for (const department of departments) {
+    const index = department.patients.findIndex((patient) => patient.id === patientId);
+    if (index !== -1) {
+      return { department, patient: department.patients[index], index };
+    }
+  }
+  return null;
+}
+
+function patientIdsForUser(user) {
+  if (!user || user.role !== "Patient") return [];
+  const ids = new Set([user.id]);
+  for (const department of departments) {
+    for (const patient of department.patients) {
+      if (patient.id === user.id || patient.userId === user.id || patient.name === user.name) ids.add(patient.id);
+    }
+  }
+  return [...ids];
+}
+
+function messageVisibleToUser(user, item) {
+  if (!item || (user.role !== "Admin" && item.hidden)) return false;
+  if (user.role === "Admin") return true;
+  if (user.role === "Patient") {
+    const patientIds = patientIdsForUser(user);
+    return patientIds.includes(item.patientId) || item.senderId === user.id || item.receiverId === user.id;
+  }
+  if (user.role === "Provider") {
+    const doctorIds = providerDoctorIds(user);
+    const departmentIds = providerDepartmentIds(user);
+    return doctorIds.includes(item.doctorId) || departmentIds.includes(item.departmentId) || item.senderId === user.id || item.receiverId === user.id;
+  }
+  return false;
+}
+
+function recordVisibleToUser(user, item) {
+  if (!item || (user.role !== "Admin" && item.hidden)) return false;
+  if (user.role === "Admin") return true;
+  if (user.role === "Patient") return patientIdsForUser(user).includes(item.patientId);
+  if (user.role === "Provider") return providerDepartmentIds(user).includes(item.departmentId);
+  return false;
+}
+
+function transferVisibleToUser(user, item) {
+  if (!item) return false;
+  if (user.role === "Admin") return true;
+  if (user.role === "Patient") return patientIdsForUser(user).includes(item.patientId);
+  if (user.role === "Provider") {
+    const departmentIds = providerDepartmentIds(user);
+    return departmentIds.includes(item.sourceDepartmentId) || departmentIds.includes(item.targetDepartmentId);
+  }
+  return false;
+}
+
+function scopedProfilesForUser(user) {
+  if (user.role === "Admin") return patientProfiles;
+  if (user.role === "Patient") {
+    return patientIdsForUser(user).reduce((profiles, patientId) => {
+      if (patientProfiles[patientId]) profiles[patientId] = patientProfiles[patientId];
+      return profiles;
+    }, {});
+  }
+  if (user.role === "Provider") {
+    const departmentIds = providerDepartmentIds(user);
+    const patientIds = departments
+      .filter((department) => departmentIds.includes(department.id))
+      .flatMap((department) => department.patients.map((patient) => patient.id));
+    return patientIds.reduce((profiles, patientId) => {
+      if (patientProfiles[patientId]) profiles[patientId] = patientProfiles[patientId];
+      return profiles;
+    }, {});
+  }
+  return {};
+}
+
+function scopedPortalData(user) {
+  const visible = (item) => user.role === "Admin" || !item.hidden;
+  const doctorIds = providerDoctorIds(user);
+  const appointmentVisibleToUser = (item) => {
+    if (!visible(item)) return false;
+    if (user.role === "Admin") return true;
+    if (user.role === "Patient") return patientIdsForUser(user).includes(item.patientId);
+    if (user.role === "Provider") return item.doctorId && doctorIds.includes(item.doctorId);
+    return false;
+  };
+  const notificationVisibleToUser = (item) => {
+    if (!visible(item)) return false;
+    if (user.role === "Admin") return true;
+    if (item.audience !== user.role) return false;
+    if (user.role === "Patient") return !item.patientId || patientIdsForUser(user).includes(item.patientId);
+    if (user.role === "Provider") return !item.doctorId || doctorIds.includes(item.doctorId);
+    return true;
+  };
+
+  return {
+    appointments: appointments.filter(appointmentVisibleToUser),
+    messages: messages.filter((item) => messageVisibleToUser(user, item)),
+    notifications: notifications.filter(notificationVisibleToUser),
+    records: patientRecords.filter((item) => recordVisibleToUser(user, item)),
+    patientProfiles: scopedProfilesForUser(user),
+    transfers: transfers.filter((item) => transferVisibleToUser(user, item))
+  };
 }
 
 app.get("/api/health", (req, res) => {
@@ -395,28 +754,19 @@ app.post("/api/auth/register", async (req, res) => {
 });
 
 app.get("/api/portal", requireAuth, (req, res) => {
-  const visible = (item) => req.user.role === "Admin" || !item.hidden;
-  const doctorIds = providerDoctorIds(req.user);
-  const appointmentVisibleToUser = (item) => {
-    if (!visible(item)) return false;
-    if (req.user.role === "Admin") return true;
-    if (req.user.role === "Patient") return item.patientId === req.user.id;
-    if (req.user.role === "Provider") return !item.doctorId || doctorIds.includes(item.doctorId);
-    return false;
-  };
+  const scoped = scopedPortalData(req.user);
+  const profileIds = Object.keys(scoped.patientProfiles);
 
   res.json({
     user: publicUser(req.user),
     vitals,
-    records,
-    appointments: appointments.filter(appointmentVisibleToUser),
-    messages: messages.filter(visible),
-    notifications: notifications.filter((item) => {
-      const audienceMatch = item.audience === req.user.role || req.user.role === "Admin";
-      const patientMatch = req.user.role !== "Patient" || !item.patientId || item.patientId === req.user.id;
-      return audienceMatch && patientMatch && visible(item);
-    }),
-    patientProfile,
+    records: scoped.records,
+    appointments: scoped.appointments,
+    messages: scoped.messages,
+    notifications: scoped.notifications,
+    patientProfile: scoped.patientProfiles[profileIds[0]] || patientProfile,
+    patientProfiles: scoped.patientProfiles,
+    transfers: scoped.transfers,
     departments,
     doctorSchedules,
     auditLogs: req.user.role === "Admin" ? auditLogs : [],
@@ -435,7 +785,20 @@ app.get("/api/audit-logs", requireAuth, (req, res) => {
 app.get("/api/search", requireAuth, (req, res) => {
   const query = String(req.query.q || "").toLowerCase();
   const filter = String(req.query.filter || "All");
-  const items = [...records, ...appointments, ...messages, ...resources, ...(req.user.role === "Admin" ? adminItems : [])];
+  const scoped = scopedPortalData(req.user);
+  const items = [
+    ...scoped.records,
+    ...scoped.appointments,
+    ...scoped.messages,
+    ...scoped.transfers.map((transfer) => ({
+      title: `Transfer ${transfer.status}`,
+      detail: `${transfer.patientName} from ${transfer.sourceDepartmentName} to ${transfer.targetDepartmentName}. ${transfer.reason}`,
+      date: transfer.requestedAt,
+      tag: "Transfer"
+    })),
+    ...resources,
+    ...(req.user.role === "Admin" ? adminItems : [])
+  ];
   const results = items.filter((item) => {
     const matchesFilter = filter === "All" || item.tag === filter || item.type === filter;
     const content = `${item.title} ${item.detail} ${item.date} ${item.tag} ${item.type || ""}`.toLowerCase();
@@ -446,7 +809,17 @@ app.get("/api/search", requireAuth, (req, res) => {
 });
 
 app.post("/api/appointments", requireAuth, (req, res) => {
-  const { department, doctor, assignment } = assignDoctor(req.body.departmentId, req.body.doctorId);
+  if (req.user.role !== "Patient") {
+    return res.status(403).json({ message: "Only patients can request appointments." });
+  }
+  const requestedDate = `${req.body.date || "Requested date"}, ${req.body.time || "Requested time"}`;
+  let assigned;
+  try {
+    assigned = assignDoctor(req.body.departmentId, req.body.doctorId, requestedDate);
+  } catch (error) {
+    return res.status(error.status || 400).json({ message: error.message });
+  }
+  const { department, doctor, assignment } = assigned;
   const appointment = {
     id: `a${Date.now()}`,
     patientId: req.user.id,
@@ -458,7 +831,7 @@ app.post("/api/appointments", requireAuth, (req, res) => {
     assignment,
     title: String(req.body.type || "Appointment"),
     detail: String(req.body.reason || "Appointment request"),
-    date: `${req.body.date || "Requested date"}, ${req.body.time || "Requested time"}`,
+    date: requestedDate,
     location: req.body.type === "Virtual visit" ? "Virtual visit" : department.location,
     tag: "Requested",
     status: "Pending",
@@ -482,6 +855,7 @@ app.post("/api/appointments", requireAuth, (req, res) => {
     {
       id: `n${Date.now()}`,
       audience: "Provider",
+      doctorId: doctor.id,
       title: "New patient request",
       detail: `${req.user.name} requested ${appointment.title} with ${doctor.name} for ${appointment.date}.`,
       date: "Just now",
@@ -490,7 +864,8 @@ app.post("/api/appointments", requireAuth, (req, res) => {
     },
     ...notifications
   ];
-  res.status(201).json({ appointment, appointments: appointments.filter((item) => item.patientId === req.user.id), notifications, doctorSchedules });
+  queueSave();
+  res.status(201).json({ appointment, appointments: scopedPortalData(req.user).appointments, notifications: scopedPortalData(req.user).notifications, doctorSchedules });
 });
 
 app.patch("/api/appointments/:id/status", requireAuth, (req, res) => {
@@ -501,6 +876,9 @@ app.patch("/api/appointments/:id/status", requireAuth, (req, res) => {
   const status = req.body.status === "Rejected" ? "Rejected" : "Approved";
   const appointment = appointments.find((item) => item.id === req.params.id);
   if (!appointment) return res.status(404).json({ message: "Appointment not found." });
+  if (!canManageAppointment(req.user, appointment)) {
+    return res.status(403).json({ message: "This appointment is outside your provider schedule." });
+  }
 
   appointment.status = status;
   appointment.tag = status;
@@ -523,8 +901,10 @@ app.patch("/api/appointments/:id/status", requireAuth, (req, res) => {
     },
     ...notifications
   ];
+  queueSave();
 
-  res.json({ appointment, appointments, notifications, doctorSchedules });
+  const scoped = scopedPortalData(req.user);
+  res.json({ appointment, appointments: scoped.appointments, notifications: scoped.notifications, doctorSchedules });
 });
 
 app.patch("/api/patient-profile", requireAuth, (req, res) => {
@@ -533,17 +913,38 @@ app.patch("/api/patient-profile", requireAuth, (req, res) => {
   }
   const allPatients = departments.flatMap((department) => department.patients);
   const selectedPatient = allPatients.find((patient) => patient.id === req.body.patientId) || allPatients[0];
+  if (!canProviderAccessPatient(req.user, selectedPatient.id)) {
+    return res.status(403).json({ message: "This patient is outside your assigned department." });
+  }
 
-  patientProfile = {
-    ...patientProfile,
+  const updatedProfile = {
+    ...(patientProfiles[selectedPatient.id] || patientProfile),
     patientId: selectedPatient.id,
     patientName: selectedPatient.name,
-    summary: String(req.body.summary || patientProfile.summary),
-    riskLevel: String(req.body.riskLevel || patientProfile.riskLevel),
+    summary: String(req.body.summary || patientProfiles[selectedPatient.id]?.summary || patientProfile.summary),
+    riskLevel: String(req.body.riskLevel || patientProfiles[selectedPatient.id]?.riskLevel || patientProfile.riskLevel),
     lastUpdatedBy: req.user.name,
     updatedAt: "Just now"
   };
-  addAuditLog(req.user, "Patient profile updated", `${req.user.name} updated ${selectedPatient.name}'s profile summary and risk level ${patientProfile.riskLevel}.`, "Important");
+  patientProfiles[selectedPatient.id] = updatedProfile;
+  patientProfile = updatedProfile;
+  patientRecords = [
+    {
+      id: `rec-${selectedPatient.id}-${Date.now()}`,
+      patientId: selectedPatient.id,
+      patientName: selectedPatient.name,
+      departmentId: findPatientDepartment(selectedPatient.id)?.department.id,
+      type: "Provider note",
+      title: "Care profile updated",
+      detail: updatedProfile.summary,
+      date: "Just now",
+      provider: req.user.name,
+      tag: updatedProfile.riskLevel,
+      hidden: false
+    },
+    ...patientRecords
+  ];
+  addAuditLog(req.user, "Patient profile updated", `${req.user.name} updated ${selectedPatient.name}'s profile summary and risk level ${updatedProfile.riskLevel}.`, "Important");
 
   notifications = [
     {
@@ -551,15 +952,17 @@ app.patch("/api/patient-profile", requireAuth, (req, res) => {
       audience: "Patient",
       patientId: selectedPatient.id,
       title: "Profile updated",
-      detail: `${req.user.name} updated ${selectedPatient.name}'s care profile: ${patientProfile.summary}`,
+      detail: `${req.user.name} updated ${selectedPatient.name}'s care profile: ${updatedProfile.summary}`,
       date: "Just now",
       tag: "Profile",
       hidden: false
     },
     ...notifications
   ];
+  queueSave();
 
-  res.json({ patientProfile, notifications });
+  const scoped = scopedPortalData(req.user);
+  res.json({ patientProfile: updatedProfile, patientProfiles: scoped.patientProfiles, records: scoped.records, notifications: scoped.notifications });
 });
 
 app.post("/api/patients", requireAuth, (req, res) => {
@@ -569,6 +972,9 @@ app.post("/api/patients", requireAuth, (req, res) => {
 
   const departmentId = String(req.body.departmentId || "dept-primary");
   const department = departments.find((item) => item.id === departmentId) || departments[0];
+  if (req.user.role === "Provider" && !providerDepartmentIds(req.user).includes(department.id)) {
+    return res.status(403).json({ message: "Providers can only create patients in their assigned department." });
+  }
   const patient = {
     id: `p${Date.now()}`,
     name: String(req.body.name || "New Patient"),
@@ -579,6 +985,9 @@ app.post("/api/patients", requireAuth, (req, res) => {
   };
 
   department.patients = [patient, ...department.patients];
+  const patientForRecords = { ...patient, departmentId: department.id, departmentName: department.name, departmentLead: department.lead };
+  patientProfiles[patient.id] = defaultProfileForPatient(patientForRecords);
+  patientRecords = [...recordsForPatient(patientForRecords), ...patientRecords];
   addAuditLog(req.user, "Patient profile created", `${req.user.name} created ${patient.name} in ${department.name}.`, "Important");
 
   notifications = [
@@ -593,8 +1002,192 @@ app.post("/api/patients", requireAuth, (req, res) => {
     },
     ...notifications
   ];
+  queueSave();
 
-  res.status(201).json({ patient, departments, notifications });
+  const scoped = scopedPortalData(req.user);
+  res.status(201).json({ patient, departments, patientProfiles: scoped.patientProfiles, records: scoped.records, notifications: scoped.notifications });
+});
+
+app.patch("/api/patients/:id/transfer", requireAuth, (req, res) => {
+  if (req.user.role !== "Provider" && req.user.role !== "Admin") {
+    return res.status(403).json({ message: "Only providers or admins can transfer patients." });
+  }
+
+  const source = findPatientDepartment(req.params.id);
+  if (!source) return res.status(404).json({ message: "Patient not found." });
+
+  if (req.user.role === "Provider" && !providerDepartmentIds(req.user).includes(source.department.id)) {
+    return res.status(403).json({ message: "Providers can only transfer patients from their assigned department." });
+  }
+
+  const targetDepartmentId = String(req.body.targetDepartmentId || "");
+  const targetDepartment = departments.find((department) => department.id === targetDepartmentId);
+  if (!targetDepartment) return res.status(400).json({ message: "Target department is required." });
+  if (targetDepartment.id === source.department.id) {
+    return res.status(400).json({ message: "Choose a different department for transfer." });
+  }
+
+  const reason = String(req.body.reason || "Clinical transfer requested").trim();
+  if (transfers.some((transfer) => transfer.patientId === source.patient.id && transfer.status === "Requested")) {
+    return res.status(409).json({ message: "This patient already has a pending transfer request." });
+  }
+
+  const transfer = {
+    id: `t${Date.now()}`,
+    patientId: source.patient.id,
+    patientName: source.patient.name,
+    sourceDepartmentId: source.department.id,
+    sourceDepartmentName: source.department.name,
+    targetDepartmentId: targetDepartment.id,
+    targetDepartmentName: targetDepartment.name,
+    requestedById: req.user.id,
+    requestedByName: req.user.name,
+    reason,
+    status: "Requested",
+    requestedAt: "Just now",
+    decidedAt: "",
+    decidedByName: "",
+    hidden: false
+  };
+  transfers = [transfer, ...transfers];
+  source.patient.status = "Transfer requested";
+  source.patient.concern = reason || source.patient.concern;
+
+  const providerNotifications = (targetDepartment.doctors || []).map((doctor, index) => ({
+    id: `n${Date.now()}-${index}`,
+    audience: "Provider",
+      doctorId: doctor.id,
+      title: "Incoming patient transfer",
+      detail: `${source.patient.name} is requested for transfer from ${source.department.name} to ${targetDepartment.name}. Reason: ${reason}.`,
+      date: "Just now",
+      tag: "Transfer",
+      hidden: false
+  }));
+
+  notifications = [
+    {
+      id: `n${Date.now()}-patient`,
+      audience: "Patient",
+      patientId: source.patient.id,
+      title: "Department transfer requested",
+      detail: `${req.user.name} requested to transfer your care from ${source.department.name} to ${targetDepartment.name}.`,
+      date: "Just now",
+      tag: "Transfer",
+      hidden: false
+    },
+    {
+      id: `n${Date.now()}-admin`,
+      audience: "Admin",
+      title: "Patient transfer requested",
+      detail: `${req.user.name} requested ${source.patient.name}'s transfer from ${source.department.name} to ${targetDepartment.name}.`,
+      date: "Just now",
+      tag: "Audit",
+      hidden: false
+    },
+    ...providerNotifications,
+    ...notifications
+  ];
+  addAuditLog(req.user, "Patient transfer requested", `${req.user.name} requested transfer for ${source.patient.name} from ${source.department.name} to ${targetDepartment.name}. Reason: ${reason}.`, "Critical");
+  queueSave();
+
+  const scoped = scopedPortalData(req.user);
+  res.json({ transfer, departments, notifications: scoped.notifications, transfers: scoped.transfers, patientProfiles: scoped.patientProfiles, patientProfile });
+});
+
+app.patch("/api/transfers/:id/status", requireAuth, (req, res) => {
+  if (req.user.role !== "Provider" && req.user.role !== "Admin") {
+    return res.status(403).json({ message: "Only receiving providers or admins can decide transfers." });
+  }
+
+  const transfer = transfers.find((item) => item.id === req.params.id);
+  if (!transfer) return res.status(404).json({ message: "Transfer request not found." });
+  if (transfer.status !== "Requested") return res.status(409).json({ message: "Transfer has already been decided." });
+  if (req.user.role === "Provider" && !providerDepartmentIds(req.user).includes(transfer.targetDepartmentId)) {
+    return res.status(403).json({ message: "Only the receiving department can accept or reject this transfer." });
+  }
+
+  const status = req.body.status === "Rejected" ? "Rejected" : "Accepted";
+  const source = findPatientDepartment(transfer.patientId);
+  const targetDepartment = departments.find((department) => department.id === transfer.targetDepartmentId);
+  if (!source || !targetDepartment) return res.status(404).json({ message: "Transfer departments are no longer available." });
+
+  transfer.status = status;
+  transfer.decidedAt = "Just now";
+  transfer.decidedByName = req.user.name;
+
+  if (status === "Accepted") {
+    const movedPatient = {
+      ...source.patient,
+      status: "Transferred",
+      concern: transfer.reason,
+      nextVisit: "Transfer intake pending"
+    };
+    source.department.patients = source.department.patients.filter((patient) => patient.id !== transfer.patientId);
+    targetDepartment.patients = [movedPatient, ...targetDepartment.patients];
+
+    const patientUser = users.find((user) => user.id === movedPatient.id);
+    if (patientUser) {
+      patientUser.plan = `${targetDepartment.name} care plan`;
+      patientUser.careTeam = targetDepartment.lead;
+    }
+
+    const updatedProfile = {
+      ...(patientProfiles[movedPatient.id] || defaultProfileForPatient({ ...movedPatient, departmentLead: targetDepartment.lead })),
+      patientId: movedPatient.id,
+      patientName: movedPatient.name,
+      summary: `${transfer.reason}. Transfer accepted by ${targetDepartment.name}; intake pending.`,
+      updatedAt: "Just now",
+      lastUpdatedBy: req.user.name
+    };
+    patientProfiles[movedPatient.id] = updatedProfile;
+    patientProfile = updatedProfile;
+    patientRecords = [
+      {
+        id: `rec-${movedPatient.id}-transfer-${Date.now()}`,
+        patientId: movedPatient.id,
+        patientName: movedPatient.name,
+        departmentId: targetDepartment.id,
+        type: "Transfer",
+        title: "Department transfer accepted",
+        detail: `${req.user.name} accepted transfer from ${source.department.name} to ${targetDepartment.name}. Reason: ${transfer.reason}.`,
+        date: "Just now",
+        provider: req.user.name,
+        tag: "Transfer",
+        hidden: false
+      },
+      ...patientRecords
+    ];
+  } else {
+    source.patient.status = "Transfer rejected";
+  }
+
+  notifications = [
+    {
+      id: `n${Date.now()}-patient`,
+      audience: "Patient",
+      patientId: transfer.patientId,
+      title: `Transfer ${status.toLowerCase()}`,
+      detail: `${req.user.name} ${status.toLowerCase()} your transfer request to ${transfer.targetDepartmentName}.`,
+      date: "Just now",
+      tag: status,
+      hidden: false
+    },
+    {
+      id: `n${Date.now()}-admin`,
+      audience: "Admin",
+      title: `Transfer ${status.toLowerCase()}`,
+      detail: `${req.user.name} ${status.toLowerCase()} ${transfer.patientName}'s transfer to ${transfer.targetDepartmentName}.`,
+      date: "Just now",
+      tag: "Audit",
+      hidden: false
+    },
+    ...notifications
+  ];
+  addAuditLog(req.user, `Patient transfer ${status.toLowerCase()}`, `${req.user.name} ${status.toLowerCase()} ${transfer.patientName}'s transfer to ${transfer.targetDepartmentName}.`, "Critical");
+  queueSave();
+
+  const scoped = scopedPortalData(req.user);
+  res.json({ transfer, departments, transfers: scoped.transfers, notifications: scoped.notifications, patientProfiles: scoped.patientProfiles, records: scoped.records, patientProfile });
 });
 
 app.post("/api/doctors", requireAuth, async (req, res) => {
@@ -605,7 +1198,7 @@ app.post("/api/doctors", requireAuth, async (req, res) => {
   const name = String(req.body.name || "").trim();
   const email = String(req.body.email || "").trim().toLowerCase();
   const specialty = String(req.body.specialty || "General Medicine").trim();
-  const department = String(req.body.department || "Primary Care").trim();
+  const departmentName = String(req.body.department || "Primary Care").trim();
   const password = String(req.body.password || "TempPass123!");
 
   if (!name || !email || password.length < 6) {
@@ -624,13 +1217,29 @@ app.post("/api/doctors", requireAuth, async (req, res) => {
     role: "Provider",
     dob: specialty,
     mrn: `Provider ID: D-${Date.now()}`,
-    plan: `${department} workspace`,
-    careTeam: department,
+    plan: `${departmentName} workspace`,
+    careTeam: departmentName,
     avatar: initials(name)
   };
 
   users.push(doctor);
-  addAuditLog(req.user, "Doctor profile created", `${req.user.name} created doctor profile ${doctor.name} for ${department}.`, "Critical");
+  const departmentRecord = departments.find((item) => item.name.toLowerCase() === departmentName.toLowerCase());
+  if (departmentRecord) {
+    departmentRecord.doctors = [
+      ...(departmentRecord.doctors || []),
+      { id: doctor.id, name: doctor.name, email: doctor.email, specialty }
+    ];
+    doctorSchedules[doctor.id] = [
+      {
+        id: `slot-${doctor.id}-1`,
+        doctorId: doctor.id,
+        title: "New provider onboarding",
+        date: "To be scheduled",
+        status: "Open"
+      }
+    ];
+  }
+  addAuditLog(req.user, "Doctor profile created", `${req.user.name} created doctor profile ${doctor.name} for ${departmentName}.`, "Critical");
 
   notifications = [
     {
@@ -644,6 +1253,7 @@ app.post("/api/doctors", requireAuth, async (req, res) => {
     },
     ...notifications
   ];
+  queueSave();
 
   res.status(201).json({ doctor: publicUser(doctor), notifications });
 });
@@ -651,7 +1261,7 @@ app.post("/api/doctors", requireAuth, async (req, res) => {
 app.patch("/api/admin/items/:collection/:id", requireAuth, (req, res) => {
   if (req.user.role !== "Admin") return res.status(403).json({ message: "Admin access required." });
 
-  const collections = { appointments, messages, notifications };
+  const collections = { appointments, messages, notifications, records: patientRecords, transfers };
   const collection = collections[req.params.collection];
   if (!collection) return res.status(404).json({ message: "Collection not found." });
 
@@ -668,28 +1278,54 @@ app.patch("/api/admin/items/:collection/:id", requireAuth, (req, res) => {
     `Admin ${req.body.hidden === true ? "hid" : req.body.hidden === false ? "showed" : "changed"} ${req.params.collection} item ${req.params.id}. No delete was performed.`,
     "Critical"
   );
+  queueSave();
 
-  res.json({ item, appointments, messages, notifications });
+  res.json({ item, appointments, messages, notifications, records: patientRecords, transfers });
 });
 
 app.post("/api/messages", requireAuth, (req, res) => {
   const detail = String(req.body.detail || "").trim();
   if (!detail) return res.status(400).json({ message: "Message cannot be empty." });
+  const patientIds = req.user.role === "Patient" ? patientIdsForUser(req.user) : [];
+  const patientDepartment =
+    req.user.role === "Patient"
+      ? departments.find((department) => department.patients.some((patient) => patientIds.includes(patient.id)))
+      : null;
+  const providerDepartment =
+    req.user.role === "Provider"
+      ? departments.find((department) => providerDepartmentIds(req.user).includes(department.id))
+      : null;
 
   const message = {
     id: `m${Date.now()}`,
-    title: `${req.user.name} to Care Team`,
+    title: req.user.role === "Patient" ? `${req.user.name} to Care Team` : `${req.user.name} secure note`,
     detail,
     date: "Just now",
-    tag: "Sent",
+    tag: req.user.role === "Patient" ? "Patient" : "Provider",
+    senderId: req.user.id,
+    senderRole: req.user.role,
+    receiverRole: req.user.role === "Patient" ? "Provider" : "Admin",
+    patientId: req.user.role === "Patient" ? patientIds[0] || req.user.id : String(req.body.patientId || ""),
+    patientName: req.user.role === "Patient" ? req.user.name : String(req.body.patientName || ""),
+    departmentId: patientDepartment?.id || providerDepartment?.id || "",
+    doctorId: providerDoctorIds(req.user)[0] || patientDepartment?.doctors?.[0]?.id || "",
     hidden: false
   };
 
   messages = [message, ...messages];
   addAuditLog(req.user, "Secure message sent", `${req.user.name} sent a secure message to care team.`, "Info");
-  res.status(201).json({ message, messages });
+  queueSave();
+  res.status(201).json({ message, messages: scopedPortalData(req.user).messages });
 });
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.once(signal, () => {
+    saveStateNow();
+    process.exit(0);
+  });
+}
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`CareBridge API running on http://localhost:${PORT}`);
+  console.log(`Portal state file: ${DATA_FILE}`);
 });

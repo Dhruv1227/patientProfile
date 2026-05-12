@@ -9,7 +9,11 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "backend": "node backend/server.js",
-    "dev:api": "node backend/server.js"
+    "dev:api": "node backend/server.js",
+    "check:api": "node --check backend/server.js",
+    "build:web": "expo export -p web",
+    "screenshots": "npm run build:web && node tools/capture-screenshots.mjs",
+    "test:workflows": "npm run check:api && npm run build:web"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
