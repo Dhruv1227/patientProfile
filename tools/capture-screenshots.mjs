@@ -81,7 +81,12 @@ const scenarios = [
   { name: "patient-dashboard-mobile", user: users.patient },
   { name: "patient-appointments-mobile", user: users.patient, tab: "Appointments", tabText: "Visits" },
   { name: "admin-panel-mobile", user: users.admin, tab: "Admin", tabText: "Admin" },
+  { name: "admin-panel-desktop", user: users.admin, tab: "Admin", tabText: "Admin", viewport: desktopViewport },
+  { name: "admin-approval-mobile", user: users.admin, tab: "Admin", tabText: "Admin", scrollText: "Admin Approval Hierarchy" },
+  { name: "admin-approval-desktop", user: users.admin, tab: "Admin", tabText: "Admin", viewport: desktopViewport, scrollText: "Admin Approval Hierarchy" },
   { name: "provider-records-mobile", user: users.provider, tab: "Records", tabText: "Records" },
+  { name: "provider-transfers-mobile", user: users.provider, tab: "Records", tabText: "Records", scrollText: "Incoming Transfer Requests" },
+  { name: "provider-transfers-desktop", user: users.dermatologist, tab: "Records", tabText: "Records", viewport: desktopViewport, scrollText: "Incoming Transfer Requests" },
   { name: "provider-records-desktop", user: users.dermatologist, tab: "Records", tabText: "Records", viewport: desktopViewport }
 ];
 
@@ -186,6 +191,22 @@ async function clickText(page, text) {
   });
 }
 
+async function scrollToText(page, text) {
+  await page.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const target = [...document.querySelectorAll("*")]
+          .filter((node) => node.textContent && node.textContent.trim() === ${JSON.stringify(text)})
+          .find((node) => {
+            const rect = node.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+        if (target) target.scrollIntoView({ block: "start", inline: "nearest" });
+      })();
+    `
+  });
+}
+
 async function applySession(page, user) {
   const session = user
     ? {
@@ -222,6 +243,11 @@ async function captureScenario(page, scenario) {
 
   if (scenario.tabText) {
     await clickText(page, scenario.tabText);
+    await wait(700);
+  }
+
+  if (scenario.scrollText) {
+    await scrollToText(page, scenario.scrollText);
     await wait(700);
   }
 

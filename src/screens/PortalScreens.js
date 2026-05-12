@@ -135,9 +135,9 @@ function Dashboard({ appointments, currentUser, messages, notifications, patient
   );
 }
 
-function DepartmentPanel({ departments }) {
+function DepartmentPanel({ departments, flow = false }) {
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, flow && styles.flowPanel]}>
       <Text style={styles.panelTitle}>Departments</Text>
       {departments.map((department) => (
         <View key={department.id} style={styles.departmentBlock}>
@@ -558,9 +558,25 @@ function SecurityView({ currentUser, auditLogs, masked, role, setMasked, mfaEnab
   );
 }
 
-function AdminView({ appointments, auditLogs, departments, messages, notifications, records, transfers, newDoctorForm, setNewDoctorForm, createDoctorProfile, adminToggleHidden, adminChangeText }) {
+function AdminView({
+  adminApprovalRequests,
+  appointments,
+  auditLogs,
+  departments,
+  messages,
+  notifications,
+  records,
+  transfers,
+  newDoctorForm,
+  setNewDoctorForm,
+  createDoctorProfile,
+  reviewAdminRequest,
+  adminToggleHidden,
+  adminChangeText
+}) {
   const totalPatients = departments.reduce((sum, department) => sum + department.patients.length, 0);
   const totalDoctors = departments.reduce((sum, department) => sum + (department.doctors || []).length, 0);
+  const pendingAdminRequests = (adminApprovalRequests || []).filter((request) => request.status === "Requested").length;
   return (
     <View style={styles.screen}>
       <PageHeader title="Admin Panel" subtitle="Admin can hide/show or change portal content. Nothing is deleted." />
@@ -569,10 +585,12 @@ function AdminView({ appointments, auditLogs, departments, messages, notificatio
         <MiniMetric label="Departments" value={String(departments.length)} />
         <MiniMetric label="Patients" value={String(totalPatients)} />
         <MiniMetric label="Hidden items" value={String([...appointments, ...messages, ...notifications, ...records, ...transfers].filter((item) => item.hidden).length)} />
+        <MiniMetric label="Admin requests" value={String(pendingAdminRequests)} />
         <MiniMetric label="Audit events" value={String(auditLogs.length)} />
       </View>
-      <DepartmentPanel departments={departments} />
-      <View style={styles.panel}>
+      <DepartmentPanel departments={departments} flow />
+      <AdminApprovalQueue requests={adminApprovalRequests || []} onDecision={reviewAdminRequest} />
+      <View style={[styles.panel, styles.flowPanel]}>
         <Text style={styles.panelTitle}>Create Doctor Profile</Text>
         <Field label="Doctor name" value={newDoctorForm.name} onChangeText={(value) => setNewDoctorForm((current) => ({ ...current, name: value }))} />
         <Field label="Email login" value={newDoctorForm.email} onChangeText={(value) => setNewDoctorForm((current) => ({ ...current, email: value }))} />
@@ -583,9 +601,10 @@ function AdminView({ appointments, auditLogs, departments, messages, notificatio
           <Text style={styles.primaryButtonText}>Create Doctor Profile</Text>
         </TouchableOpacity>
       </View>
-      <Panel title="Access and Compliance" items={adminItems} />
+      <Panel title="Access and Compliance" items={adminItems} flow />
       <Panel
         title="Security Activity Log"
+        flow
         items={auditLogs.map((log) => ({
           title: log.action,
           detail: `${log.actor} (${log.role}): ${log.detail}`,
@@ -614,9 +633,43 @@ function AdminView({ appointments, auditLogs, departments, messages, notificatio
   );
 }
 
+function AdminApprovalQueue({ requests, onDecision }) {
+  const sortedRequests = [...requests].sort((a, b) => (a.status === "Requested" ? -1 : 1) - (b.status === "Requested" ? -1 : 1));
+
+  return (
+    <View style={[styles.panel, styles.flowPanel]}>
+      <Text style={styles.panelTitle}>Admin Approval Hierarchy</Text>
+      <Text style={styles.recordDetail}>New admin accounts stay pending until an existing admin verifies the person and approves access.</Text>
+      {sortedRequests.map((request) => (
+        <View key={request.id} style={styles.actionCard}>
+          <RecordCard
+            item={{
+              title: request.name,
+              detail: `${request.email}. ${request.verificationNote || request.decisionNote || "Verify identity and role before approval."}`,
+              date: request.decidedAt ? `${request.status} by ${request.decidedBy || "admin"} on ${request.decidedAt}` : request.requestedAt || "Requested",
+              tag: request.status
+            }}
+          />
+          {request.status === "Requested" ? (
+            <View style={styles.actionRow}>
+              <TouchableOpacity style={styles.approveButton} onPress={() => onDecision(request.id, "Approved")}>
+                <Text style={styles.actionButtonText}>Approve Admin</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.rejectButton} onPress={() => onDecision(request.id, "Rejected")}>
+                <Text style={styles.actionButtonText}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+      ))}
+      {!sortedRequests.length ? <RecordCard item={{ title: "No admin requests", detail: "There are no pending admin access requests.", date: "Current", tag: "Clear" }} /> : null}
+    </View>
+  );
+}
+
 function AdminCollection({ title, collection, items, onHide, onChange }) {
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, styles.flowPanel]}>
       <Text style={styles.panelTitle}>{title}</Text>
       {items.map((item) => (
         <View key={`${collection}-${item.id || item.title}`} style={styles.actionCard}>

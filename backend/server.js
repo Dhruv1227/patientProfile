@@ -104,6 +104,17 @@ let patientProfile = {
 let patientProfiles = {};
 let patientRecords = [];
 let transfers = [];
+let adminApprovalRequests = [
+  {
+    id: "admin-request-1",
+    name: "Jordan Lee",
+    email: "jordan.admin@care.test",
+    passwordHash: bcrypt.hashSync("portal123", 10),
+    status: "Requested",
+    requestedAt: "Today",
+    verificationNote: "Verify school or clinic authorization before granting admin access."
+  }
+];
 
 let auditLogs = [
   {
@@ -132,6 +143,7 @@ function serializableState() {
     patientProfiles,
     patientRecords,
     transfers,
+    adminApprovalRequests,
     auditLogs,
     departments,
     doctorSchedules
@@ -484,6 +496,7 @@ function hydrateFromDisk() {
     if (state.patientProfiles && typeof state.patientProfiles === "object") patientProfiles = { ...patientProfiles, ...state.patientProfiles };
     if (Array.isArray(state.patientRecords)) patientRecords = state.patientRecords;
     if (Array.isArray(state.transfers)) transfers = state.transfers;
+    if (Array.isArray(state.adminApprovalRequests)) adminApprovalRequests = state.adminApprovalRequests;
     if (Array.isArray(state.auditLogs)) auditLogs = state.auditLogs;
     if (Array.isArray(state.departments)) departments = state.departments;
     if (state.doctorSchedules && typeof state.doctorSchedules === "object") doctorSchedules = state.doctorSchedules;
@@ -502,6 +515,11 @@ if (!restoredState) saveStateNow();
 function publicUser(user) {
   const { passwordHash, ...safeUser } = user;
   return safeUser;
+}
+
+function publicAdminRequest(request) {
+  const { passwordHash, ...safeRequest } = request;
+  return safeRequest;
 }
 
 function createToken(user) {
@@ -711,6 +729,17 @@ app.post("/api/auth/login", async (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
   const user = users.find((candidate) => candidate.email === email);
+  const adminRequest = adminApprovalRequests.find((candidate) => candidate.email === email && ["Requested", "Rejected"].includes(candidate.status));
+
+  if (!user && adminRequest && (await bcrypt.compare(password, adminRequest.passwordHash))) {
+    addAuditLog(null, "Pending admin login blocked", `${email} attempted login while admin access is ${adminRequest.status.toLowerCase()}.`, "Warning");
+    return res.status(403).json({
+      message:
+        adminRequest.status === "Requested"
+          ? "Your admin account request is waiting for approval from an existing admin."
+          : "Your admin account request was rejected. Contact the current admin."
+    });
+  }
 
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     addAuditLog(null, "Failed login", `Failed login attempt for ${email}.`, "Warning");
@@ -733,6 +762,43 @@ app.post("/api/auth/register", async (req, res) => {
 
   if (users.some((user) => user.email === email)) {
     return res.status(409).json({ message: "An account with that email already exists." });
+  }
+
+  if (role === "Admin") {
+    const openRequest = adminApprovalRequests.find((request) => request.email === email && request.status === "Requested");
+    if (openRequest) {
+      return res.status(409).json({ message: "An admin approval request already exists for this email." });
+    }
+
+    const request = {
+      id: `admin-request-${Date.now()}`,
+      name,
+      email,
+      passwordHash: await bcrypt.hash(password, 10),
+      status: "Requested",
+      requestedAt: new Date().toLocaleString(),
+      verificationNote: "Pending identity and role verification by an existing admin."
+    };
+    adminApprovalRequests = [request, ...adminApprovalRequests];
+    notifications = [
+      {
+        id: `n${Date.now()}-admin-request`,
+        audience: "Admin",
+        title: "New admin approval request",
+        detail: `${name} requested admin portal access with ${email}. Verify identity before approval.`,
+        date: "Just now",
+        tag: "Admin request",
+        hidden: false
+      },
+      ...notifications
+    ];
+    addAuditLog(null, "Admin approval requested", `${email} requested admin access and is waiting for existing admin approval.`, "Critical");
+    queueSave();
+    return res.status(202).json({
+      pendingApproval: true,
+      message: "Admin account request submitted. An existing admin must approve it before login is enabled.",
+      adminRequest: publicAdminRequest(request)
+    });
   }
 
   const user = {
@@ -769,6 +835,7 @@ app.get("/api/portal", requireAuth, (req, res) => {
     transfers: scoped.transfers,
     departments,
     doctorSchedules,
+    adminApprovalRequests: req.user.role === "Admin" ? adminApprovalRequests.map(publicAdminRequest) : [],
     auditLogs: req.user.role === "Admin" ? auditLogs : [],
     resources,
     adminItems: req.user.role === "Admin" ? adminItems : []
@@ -1256,6 +1323,77 @@ app.post("/api/doctors", requireAuth, async (req, res) => {
   queueSave();
 
   res.status(201).json({ doctor: publicUser(doctor), notifications });
+});
+
+app.patch("/api/admin-requests/:id/status", requireAuth, (req, res) => {
+  if (req.user.role !== "Admin") return res.status(403).json({ message: "Admin access required." });
+
+  const status = String(req.body.status || "");
+  if (!["Approved", "Rejected"].includes(status)) {
+    return res.status(400).json({ message: "Admin request status must be Approved or Rejected." });
+  }
+
+  const request = adminApprovalRequests.find((candidate) => candidate.id === req.params.id);
+  if (!request) return res.status(404).json({ message: "Admin approval request not found." });
+  if (request.status !== "Requested") {
+    return res.status(409).json({ message: `This admin request is already ${request.status.toLowerCase()}.` });
+  }
+
+  if (status === "Approved") {
+    if (users.some((user) => user.email === request.email)) {
+      request.status = "Rejected";
+      request.decidedAt = new Date().toLocaleString();
+      request.decidedBy = req.user.name;
+      request.decisionNote = "Rejected because an account already exists for this email.";
+      queueSave();
+      return res.status(409).json({ message: "A user with that email already exists." });
+    }
+
+    const adminUser = {
+      id: `admin-${Date.now()}`,
+      name: request.name,
+      email: request.email,
+      passwordHash: request.passwordHash,
+      role: "Admin",
+      dob: "Operations",
+      mrn: `Admin ID: ADM-${Date.now()}`,
+      plan: "Compliance workspace",
+      careTeam: "Admin approved access",
+      avatar: initials(request.name)
+    };
+    users.push(adminUser);
+    request.approvedUserId = adminUser.id;
+  }
+
+  request.status = status;
+  request.decidedAt = new Date().toLocaleString();
+  request.decidedBy = req.user.name;
+  request.decisionNote =
+    status === "Approved"
+      ? "Verified by existing admin and promoted to admin account."
+      : "Rejected by existing admin after verification review.";
+
+  notifications = [
+    {
+      id: `n${Date.now()}-admin-decision`,
+      audience: "Admin",
+      title: `Admin request ${status.toLowerCase()}`,
+      detail: `${req.user.name} ${status.toLowerCase()} admin access for ${request.email}.`,
+      date: "Just now",
+      tag: status,
+      hidden: false
+    },
+    ...notifications
+  ];
+  addAuditLog(req.user, `Admin request ${status.toLowerCase()}`, `${req.user.name} ${status.toLowerCase()} admin access for ${request.email}.`, "Critical");
+  queueSave();
+
+  res.json({
+    adminRequest: publicAdminRequest(request),
+    adminApprovalRequests: adminApprovalRequests.map(publicAdminRequest),
+    notifications,
+    auditLogs
+  });
 });
 
 app.patch("/api/admin/items/:collection/:id", requireAuth, (req, res) => {

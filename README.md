@@ -1,61 +1,64 @@
 # CareBridge Patient Portal
 
-CareBridge is a mobile-first patient portal built with React Native, Expo, and a local Express backend. I built it to feel closer to a working clinic application than a static class demo: patients can request appointments, doctors can manage their own department workflow, and admins can oversee the portal without deleting clinical history.
+CareBridge is a mobile-first patient portal built with React Native, Expo, and a small Express backend. The goal was to make the app feel like a practical clinic tool instead of a static school demo. Patients can book appointments and message their care team, doctors can manage department workflows, and admins can control access without deleting clinical history.
 
-The app works in Expo Go, Android/iOS simulators, and Chrome through React Native Web.
+The project runs in Expo Go on a phone, in Android/iOS simulators, and in the browser through React Native Web.
 
 ## Screenshots
 
-| Login | Patient Dashboard |
-| --- | --- |
-| <img src="docs/screenshots/login-mobile.png" width="260" alt="CareBridge login screen" /> | <img src="docs/screenshots/patient-dashboard-mobile.png" width="260" alt="Patient dashboard screen" /> |
+| Login | Patient Dashboard | Appointment Booking |
+| --- | --- | --- |
+| <img src="docs/screenshots/login-mobile.png" width="230" alt="CareBridge login screen" /> | <img src="docs/screenshots/patient-dashboard-mobile.png" width="230" alt="Patient dashboard screen" /> | <img src="docs/screenshots/patient-appointments-mobile.png" width="230" alt="Patient appointment booking screen" /> |
 
-| Appointment Booking | Admin Panel |
-| --- | --- |
-| <img src="docs/screenshots/patient-appointments-mobile.png" width="260" alt="Appointment booking screen" /> | <img src="docs/screenshots/admin-panel-mobile.png" width="260" alt="Admin panel screen" /> |
+| Admin Panel | Admin Approval | Provider Transfers |
+| --- | --- | --- |
+| <img src="docs/screenshots/admin-panel-mobile.png" width="230" alt="Admin panel screen" /> | <img src="docs/screenshots/admin-approval-mobile.png" width="230" alt="Admin approval workflow screen" /> | <img src="docs/screenshots/provider-transfers-mobile.png" width="230" alt="Provider transfer workflow screen" /> |
 
-## What The App Does
+## What This App Covers
 
-CareBridge has three connected portals.
+CareBridge has three connected workspaces: patient, provider, and admin. The data is synthetic, but the workflows are designed to behave like a real portal.
 
-Patients can sign in, view their dashboard, search portal content, read medical records, send secure messages, and request appointments. When booking a visit, the patient can choose a department and doctor, or leave the doctor blank so the system can assign one based on schedule availability.
+Patients can sign in, review their dashboard, search resources, view records, request appointments, and send secure messages. When booking an appointment, they can choose a doctor or leave the field open so the app assigns the doctor with the lightest schedule in that department.
 
-Doctors get a provider dashboard for their assigned department. They can review patient appointment requests, approve or reject them, update patient care summaries, create new patient profiles, and request a department transfer when a patient needs another care team.
+Doctors see the patients and requests connected to their own department. They can approve or reject appointment requests, update patient summaries, create new patient profiles, and request a transfer when a patient needs another department.
 
-Admins can see the operational side of the portal. They can create doctor accounts, review audit activity, hide or show portal content, and change records without deleting them. The audit log is intentionally read-only for everyone except admin users.
+Admins get the operational view. They can create doctor accounts, approve new admin requests, review audit logs, and hide or update content. The admin panel does not delete records, which keeps the demo closer to how a real healthcare system protects history.
 
-## Main Features
+## Key Features
 
-- Patient, doctor/provider, and admin login
-- User registration for local testing
-- JWT authentication on the backend
+- Separate patient, provider, and admin portals
+- Secure login backed by JWT authentication
 - Password hashing with bcrypt
-- Session restore after browser refresh
-- Inactivity auto-lock
-- Role-based dashboards and navigation
-- Patient appointment requests
-- Doctor approve/reject workflow
+- Browser session restore after refresh
+- Inactivity auto-lock for security
+- Mobile-first layout with tablet and desktop support
+- Personalized dashboard for each role
+- Search across records, messages, appointments, transfers, and resources
+- Patient appointment booking with department and doctor selection
+- Automatic doctor assignment based on schedule capacity
+- Doctor approve/reject workflow for appointment requests
 - Doctor schedule conflict checks
-- Auto-assignment when a patient does not choose a doctor
 - Secure messages scoped by role
-- Medical records scoped by patient, doctor, and admin permissions
-- Patient profile updates with patient notifications
-- Department transfer request workflow
-- Admin-only audit log
-- Admin hide/show/change controls with no delete action
-- Local JSON persistence for demo data
-- Mobile, tablet, and web responsive layout
-- Screenshot automation for README images
+- Medical records scoped by patient, provider department, and admin access
+- Patient profile updates with notifications
+- Department transfer requests between provider teams
+- Doctor-created patient profiles
+- Admin-created doctor profiles
+- Admin approval hierarchy for new admin accounts
+- Admin-only audit log for security activity
+- Hide/show/change controls with no delete action
+- Local JSON persistence for demo state
+- Screenshot automation for README images and UI checks
 
-## Clinic Data Included
+## Demo Clinic Data
 
-The demo starts with a realistic clinic workspace:
+The app starts with a ready-to-use clinic workspace:
 
 - 5 departments
-- 2 doctors per department
-- 5 patients per department
-- 25 department patients
-- seeded appointments, messages, records, schedules, and notifications
+- 2 doctors in each department
+- 5 patients in each department
+- 25 seeded department patients
+- Seeded appointments, messages, schedules, records, notifications, transfers, and audit events
 
 Departments included:
 
@@ -76,40 +79,52 @@ Departments included:
 - bcryptjs
 - Local JSON file persistence
 
-## Run The Project
+## Running The App
 
-The easiest way to run everything is:
+The easiest way to start the full portal is:
 
 ```bash
 ./run-portal.sh
 ```
 
-That script starts the backend and Expo together. Scan the QR code with Expo Go for the mobile app, or press `w` in the terminal to open the web version.
+The script starts both the backend and Expo. Scan the QR code with Expo Go to open it on a phone, or press `w` in the Expo terminal for the web version.
 
-You can also choose one mode:
+You can also start a specific mode:
 
 ```bash
 ./run-portal.sh mobile
 ./run-portal.sh web
 ```
 
-The script will install dependencies if needed, start the backend on `http://localhost:4000`, detect your LAN IP for Expo Go, and set `EXPO_PUBLIC_API_URL` for the app.
+The script installs dependencies if needed, starts the backend on `http://localhost:4000`, detects the local network IP for Expo Go, and passes `EXPO_PUBLIC_API_URL` into the app.
 
 ## Manual Commands
 
+Install dependencies:
+
 ```bash
 npm install
+```
+
+Start the backend:
+
+```bash
 npm run backend
+```
+
+Start Expo:
+
+```bash
 npm start
 ```
 
-For web only:
+Run web only:
 
 ```bash
 npm run web
 ```
 
-For validation:
+Validate the project:
 
 ```bash
 npm run check:api
@@ -117,7 +132,7 @@ npm run build:web
 npm run test:workflows
 ```
 
-To regenerate README screenshots:
+Regenerate screenshots:
 
 ```bash
 npm run screenshots
@@ -125,7 +140,7 @@ npm run screenshots
 
 ## Local Configuration
 
-Create a local `.env` file from the example if you want to change ports or secrets:
+Create a local environment file from the example:
 
 ```bash
 cp .env.example .env
@@ -140,7 +155,7 @@ DATA_FILE=backend/data/portal-state.json
 EXPO_PUBLIC_API_URL=http://localhost:4000
 ```
 
-Runtime data is stored in `backend/data/portal-state.json`. That file is ignored by git so local testing changes do not get uploaded.
+Runtime state is saved in `backend/data/portal-state.json`. That file is ignored by git so local testing does not overwrite the clean demo state in the repository.
 
 ## Demo Logins
 
@@ -158,7 +173,7 @@ Doctor: dr.chen@care.test
 Admin: admin@care.test
 ```
 
-All doctor and patient accounts are listed in [DEMO_CREDENTIALS.md](DEMO_CREDENTIALS.md).
+The full list of seeded doctor and patient accounts is available in [DEMO_CREDENTIALS.md](DEMO_CREDENTIALS.md).
 
 ## API Routes
 
@@ -177,18 +192,19 @@ POST   /api/patients
 PATCH  /api/patients/:id/transfer
 PATCH  /api/transfers/:id/status
 POST   /api/doctors
+PATCH  /api/admin-requests/:id/status
 PATCH  /api/admin/items/:collection/:id
 ```
 
 ## Project Structure
 
 ```text
-App.js                         App shell, auth flow, shared state, navigation
-src/data/portalSeed.js         Seed users, departments, records, tasks
+App.js                         App shell, authentication, shared state, navigation
+src/data/portalSeed.js         Seed users, departments, schedules, records, tasks
 src/screens/PortalScreens.js   Patient, provider, and admin screens
-src/components/common.js       Shared cards, fields, panels, toggles
+src/components/common.js       Shared cards, fields, panels, and UI helpers
 src/services/api.js            API URL and fetch helper
-src/services/sessionStorage.js Browser session persistence helper
+src/services/sessionStorage.js Session persistence helper
 src/utils/roleScope.js         Role scoping helpers
 src/styles.js                  Shared React Native styles
 backend/server.js              Express API server
@@ -201,6 +217,6 @@ docs/screenshots/              README screenshots
 
 ## Notes
 
-This is a demo/training portal. It uses synthetic data only and should not be used with real patient information.
+CareBridge uses synthetic healthcare data only. It is meant for learning, demonstrations, and portfolio review. It should not be used with real patient information.
 
-Generated folders such as `node_modules`, `dist`, `.expo`, backend runtime data, and archived backup files are intentionally ignored by git.
+Generated folders such as `node_modules`, `dist`, `.expo`, backend runtime data, local environment files, and archived backup files are ignored by git.

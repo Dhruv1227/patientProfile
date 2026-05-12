@@ -11,9 +11,9 @@ function PageHeader({ title, subtitle }) {
   );
 }
 
-function Panel({ title, items, masked = false, action, onAction }) {
+function Panel({ title, items, masked = false, action, onAction, flow = false }) {
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, flow && styles.flowPanel]}>
       <View style={styles.panelHeader}>
         <Text style={styles.panelTitle}>{title}</Text>
         {action ? (

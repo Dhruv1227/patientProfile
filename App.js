@@ -12,6 +12,7 @@ import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 
 import {
   actionByRole,
+  adminApprovalRequestSeed,
   adminItems,
   appointmentSeed,
   auditLogSeed,
@@ -84,6 +85,7 @@ export default function App() {
   });
   const [medicalRecords, setMedicalRecords] = useState(records);
   const [transfers, setTransfers] = useState([]);
+  const [adminApprovalRequests, setAdminApprovalRequests] = useState(adminApprovalRequestSeed);
   const [auditLogs, setAuditLogs] = useState(auditLogSeed);
   const [departments, setDepartments] = useState(departmentsWithDoctors());
   const [doctorSchedules, setDoctorSchedules] = useState(doctorScheduleSeed);
@@ -259,6 +261,7 @@ export default function App() {
     setPatientProfiles(data.patientProfiles || { [profileSeed.patientId]: data.patientProfile || profileSeed });
     setMedicalRecords(data.records || records);
     setTransfers(data.transfers || []);
+    setAdminApprovalRequests(data.adminApprovalRequests || adminApprovalRequestSeed);
     setDepartments(departmentsWithDoctors(data.departments || departmentSeed));
     setDoctorSchedules(data.doctorSchedules || doctorScheduleSeed);
     setAuditLogs(data.auditLogs || auditLogSeed);
@@ -273,6 +276,10 @@ export default function App() {
 
   function hasScheduleConflict(doctorId, date) {
     return (doctorSchedules[doctorId] || []).some((slot) => slot.date === date && !["Open", "Rejected", "Cancelled"].includes(slot.status));
+  }
+
+  function isNetworkError(error) {
+    return /failed to fetch|network request failed|load failed/i.test(String(error?.message || ""));
   }
 
   function addLocalAudit(action, detail, severity = "Info") {
@@ -323,6 +330,13 @@ export default function App() {
             role: form.role
           }
         });
+        if (data.pendingApproval) {
+          setAuthMode("login");
+          setAuthError(data.message || "Admin account request submitted for approval.");
+          setApiStatus("Admin approval pending");
+          setForm((current) => ({ ...current, password: "" }));
+          return;
+        }
         startSession(data.user, data.token);
         setApiStatus("Secure API connected");
         await loadPortal(data.token);
@@ -330,6 +344,18 @@ export default function App() {
         return;
       } catch (error) {
         setApiStatus("Offline continuity mode");
+        if (form.role === "Admin") {
+          setAuthError(
+            isNetworkError(error)
+              ? "Admin accounts require approval from an existing admin. Start the backend and submit the request again."
+              : error.message || "Admin registration could not be submitted."
+          );
+          return;
+        }
+        if (!isNetworkError(error)) {
+          setAuthError(error.message || "Registration could not be completed.");
+          return;
+        }
       }
 
       const newUser = {
@@ -365,6 +391,10 @@ export default function App() {
       return;
     } catch (error) {
       setApiStatus("Offline continuity mode");
+      if (!isNetworkError(error)) {
+        setAuthError(error.message || "Sign in failed.");
+        return;
+      }
     }
 
     const match = users.find((user) => user.email === normalizedEmail && user.password === form.password);
@@ -914,6 +944,41 @@ export default function App() {
     setNewDoctorForm((current) => ({ ...current, name: "Dr. New Provider", email: "new.provider@care.test" }));
   }
 
+  async function reviewAdminRequest(requestId, status) {
+    if (authToken) {
+      try {
+        const data = await apiRequest(`/api/admin-requests/${requestId}/status`, {
+          method: "PATCH",
+          token: authToken,
+          body: { status }
+        });
+        setAdminApprovalRequests(data.adminApprovalRequests || adminApprovalRequests);
+        setNotifications(data.notifications || notifications);
+        setAuditLogs(data.auditLogs || auditLogs);
+        await loadPortal(authToken);
+        return;
+      } catch (error) {
+        showAppError(error.message || "Admin request decision could not be saved.");
+        return;
+      }
+    }
+
+    setAdminApprovalRequests((current) =>
+      current.map((request) =>
+        request.id === requestId
+          ? {
+              ...request,
+              status,
+              decidedAt: "Just now",
+              decidedBy: currentUser.name,
+              decisionNote: status === "Approved" ? "Verified by existing admin." : "Rejected by existing admin."
+            }
+          : request
+      )
+    );
+    addLocalAudit(`Admin request ${status.toLowerCase()}`, `${currentUser.name} ${status.toLowerCase()} admin request ${requestId}.`, "Critical");
+  }
+
   if (isRestoringSession) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -1177,6 +1242,7 @@ export default function App() {
           )}
           {activeTab === "Admin" && (
             <AdminView
+              adminApprovalRequests={adminApprovalRequests}
               appointments={appointments}
               auditLogs={auditLogs}
               departments={departments}
@@ -1187,6 +1253,7 @@ export default function App() {
               newDoctorForm={newDoctorForm}
               setNewDoctorForm={setNewDoctorForm}
               createDoctorProfile={createDoctorProfile}
+              reviewAdminRequest={reviewAdminRequest}
               adminToggleHidden={adminToggleHidden}
               adminChangeText={adminChangeText}
             />

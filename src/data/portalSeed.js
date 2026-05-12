@@ -90,6 +90,17 @@ export const auditLogSeed = [
   { id: "log1", actor: "System", role: "System", action: "Portal started", detail: "CareBridge portal initialized.", date: "Today", severity: "Info" }
 ];
 
+export const adminApprovalRequestSeed = [
+  {
+    id: "admin-request-1",
+    name: "Jordan Lee",
+    email: "jordan.admin@care.test",
+    status: "Requested",
+    requestedAt: "Today",
+    verificationNote: "Verify school or clinic authorization before granting admin access."
+  }
+];
+
 export const departmentSeed = [
   {
     id: "dept-primary",

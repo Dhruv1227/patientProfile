@@ -8,7 +8,7 @@ CareBridge has three connected roles:
 
 - Patient: books visits, selects a department/doctor, reads notifications, sends messages, and views records.
 - Doctor/Provider: reviews appointment requests, approves or rejects requests, updates patient profiles, creates patients, and transfers patients between departments.
-- Admin: creates doctor profiles, monitors departments, reviews audit logs, and hides or changes operational items without deleting them.
+- Admin: approves new admin access requests, creates doctor profiles, monitors departments, reviews audit logs, and hides or changes operational items without deleting them.
 
 ```mermaid
 flowchart TD
@@ -26,7 +26,11 @@ flowchart TD
   Provider --> Transfer[Department Transfer]
   Transfer --> ReceivingDoctors[Receiving Department Notifications]
   Transfer --> AdminAudit[Admin Audit Log]
+  NewAdmin[New Admin Registration] --> AdminApproval[Existing Admin Approval Queue]
+  AdminApproval -->|Approved| AdminAccount[Admin Account Enabled]
+  AdminApproval -->|Rejected| Blocked[Access Blocked]
   Admin[Admin Panel] --> DoctorCreate[Create Doctor]
+  Admin --> AdminApproval
   Admin --> HideChange[Hide or Change Items]
   HideChange --> AdminAudit
 ```
@@ -41,9 +45,11 @@ flowchart TD
 4. If a backend JWT exists, the app reloads `/api/portal`.
 5. If the JWT expired, the app clears the session and asks the user to sign in again.
 6. If no session exists, the login/register screen is shown.
-7. On login/register, the backend returns a JWT and public user profile.
-8. The app saves a safe session and loads role-specific data.
-9. Sign out clears the local session.
+7. Patient/provider registration returns a JWT and public user profile.
+8. Admin registration creates a pending approval request instead of direct access.
+9. A current admin must approve the request before the new admin can sign in.
+10. The app saves a safe session and loads role-specific data.
+11. Sign out clears the local session.
 
 Current files:
 
@@ -116,14 +122,17 @@ PATCH /api/patients/:id/transfer
 1. Admin opens `Admin`.
 2. Admin can review departments, doctors, patients, and operational metrics.
 3. Admin creates doctor profiles and assigns them to departments.
-4. Admin can hide/show or change appointment, message, and notification items.
-5. Admin cannot delete operational items.
-6. Admin reviews read-only audit logs.
+4. Admin reviews new admin account requests.
+5. Admin approves verified admins or rejects unverified requests.
+6. Admin can hide/show or change appointment, message, and notification items.
+7. Admin cannot delete operational items.
+8. Admin reviews read-only audit logs.
 
 Main API routes:
 
 ```text
 POST  /api/doctors
+PATCH /api/admin-requests/:id/status
 PATCH /api/admin/items/:collection/:id
 GET   /api/audit-logs
 ```
@@ -157,6 +166,7 @@ This is good for a classroom demo because it survives backend restarts. It is no
 - Role-specific dashboards and navigation.
 - Provider access is scoped by department for patient updates and transfers.
 - Appointment requests update doctor schedules and notifications.
+- New admin accounts require approval from an existing admin before login.
 - Admin audit log is read-only in the UI.
 - Local JSON persistence prevents demo data from resetting on every backend restart.
 - Mobile and web support through Expo.
@@ -174,6 +184,7 @@ The following gaps from the first review have now been converted into working pr
 | Transfer acceptance | A transfer request is now created first. Receiving department doctors or admins can accept or reject it. |
 | Appointment conflicts | Requested doctors are checked for same-time schedule conflicts. Auto-assignment only chooses an available doctor. |
 | Admin coverage | Admin can now manage medical records and transfer requests in addition to appointments, messages, and notifications. |
+| Admin hierarchy | New admin registration now creates a pending request. Existing admins approve or reject access before the account can login. |
 | Visible error handling | Sync and validation failures now show a visible dismissible app message instead of silently falling back. |
 | Auto-lock | The app now locks/signs out the browser session after inactivity. |
 

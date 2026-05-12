@@ -198,7 +198,8 @@ export const styles = StyleSheet.create({
   },
   appShell: {
     flex: 1,
-    backgroundColor: palette.softer
+    backgroundColor: palette.softer,
+    minHeight: 0
   },
   appShellWide: {
     flexDirection: "row"
@@ -386,12 +387,13 @@ export const styles = StyleSheet.create({
     alignSelf: "center"
   },
   contentScroller: {
-    flex: 1
+    flex: 1,
+    minHeight: 0
   },
   mobileContent: {
     paddingHorizontal: 12,
     paddingTop: 12,
-    paddingBottom: 18
+    paddingBottom: 112
   },
   screen: {
     gap: 16
