@@ -555,6 +555,7 @@ export const styles = StyleSheet.create({
   },
   workspaceGridWide: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "flex-start"
   },
   twoColumn: {
@@ -568,6 +569,7 @@ export const styles = StyleSheet.create({
     flexGrow: 1,
     flexShrink: 1,
     minWidth: 260,
+    maxWidth: "100%",
     backgroundColor: palette.surface,
     borderRadius: 8,
     borderWidth: 1,

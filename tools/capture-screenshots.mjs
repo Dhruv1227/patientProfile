@@ -80,6 +80,7 @@ const scenarios = [
   { name: "login-mobile", user: null },
   { name: "patient-dashboard-mobile", user: users.patient },
   { name: "patient-appointments-mobile", user: users.patient, tab: "Appointments", tabText: "Visits" },
+  { name: "provider-dashboard-desktop", user: users.dermatologist, viewport: desktopViewport },
   { name: "admin-panel-mobile", user: users.admin, tab: "Admin", tabText: "Admin" },
   { name: "admin-panel-desktop", user: users.admin, tab: "Admin", tabText: "Admin", viewport: desktopViewport },
   { name: "admin-approval-mobile", user: users.admin, tab: "Admin", tabText: "Admin", scrollText: "Admin Approval Hierarchy" },
@@ -207,6 +208,54 @@ async function scrollToText(page, text) {
   });
 }
 
+async function assertNoHorizontalOverflow(page, scenarioName) {
+  const evaluation = await page.send("Runtime.evaluate", {
+    returnByValue: true,
+    expression: `
+      (() => {
+        const viewportWidth = document.documentElement.clientWidth;
+        const offenders = [...document.querySelectorAll("body *")]
+          .map((node) => {
+            const rect = node.getBoundingClientRect();
+            const style = getComputedStyle(node);
+            const label = (node.innerText || node.textContent || "")
+              .trim()
+              .replace(/\\s+/g, " ")
+              .slice(0, 90);
+
+            return {
+              tag: node.tagName.toLowerCase(),
+              label,
+              left: Math.round(rect.left),
+              right: Math.round(rect.right),
+              width: Math.round(rect.width),
+              display: style.display,
+              visibility: style.visibility
+            };
+          })
+          .filter((item) =>
+            item.width > 0 &&
+            item.display !== "none" &&
+            item.visibility !== "hidden" &&
+            (item.left < -2 || item.right > viewportWidth + 2)
+          )
+          .slice(0, 6);
+
+        return {
+          viewportWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          offenders
+        };
+      })();
+    `
+  });
+
+  const result = evaluation.result.value;
+  if (result.scrollWidth > result.viewportWidth + 2 || result.offenders.length) {
+    throw new Error(`${scenarioName} has horizontal overflow: ${JSON.stringify(result)}`);
+  }
+}
+
 async function applySession(page, user) {
   const session = user
     ? {
@@ -249,6 +298,10 @@ async function captureScenario(page, scenario) {
   if (scenario.scrollText) {
     await scrollToText(page, scenario.scrollText);
     await wait(700);
+  }
+
+  if (!viewport.mobile) {
+    await assertNoHorizontalOverflow(page, scenario.name);
   }
 
   const screenshot = await page.send("Page.captureScreenshot", {

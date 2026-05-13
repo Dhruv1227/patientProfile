@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .expo/
+.clj-kondo/
+.lsp/
 unused_files/
 backend/data/
 .env
