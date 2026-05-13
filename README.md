@@ -8,13 +8,21 @@ Recent updates added live portal syncing. When a user is signed in through the b
 
 ## Screenshots
 
+### Mobile Portal Flow
+
 | Login | Patient Dashboard | Appointment Booking |
 | --- | --- | --- |
 | <img src="docs/screenshots/login-mobile.png" width="230" alt="CareBridge login screen" /> | <img src="docs/screenshots/patient-dashboard-mobile.png" width="230" alt="Patient dashboard screen" /> | <img src="docs/screenshots/patient-appointments-mobile.png" width="230" alt="Patient appointment booking screen" /> |
 
+### Admin And Provider Workflows
+
 | Admin Panel | Admin Approval | Provider Transfers |
 | --- | --- | --- |
 | <img src="docs/screenshots/admin-panel-mobile.png" width="230" alt="Admin panel screen" /> | <img src="docs/screenshots/admin-approval-mobile.png" width="230" alt="Admin approval workflow screen" /> | <img src="docs/screenshots/provider-transfers-mobile.png" width="230" alt="Provider transfer workflow screen" /> |
+
+### Desktop Provider Dashboard
+
+<img src="docs/screenshots/provider-dashboard-desktop.png" width="760" alt="Desktop provider dashboard with wrapped dashboard cards" />
 
 ## What This App Covers
 
@@ -25,6 +33,17 @@ Patients can sign in, review their dashboard, search resources, view records, re
 Doctors see the patients and requests connected to their own department. They can approve or reject appointment requests, update patient summaries, create new patient profiles, and request a transfer when a patient needs another department.
 
 Admins get the operational view. They can create doctor accounts, approve new admin requests, review audit logs, and hide or update content. The admin panel does not delete records, which keeps the demo closer to how a real healthcare system protects history.
+
+## Suggested Demo Path
+
+For a presentation, this sequence shows the connected workflow clearly:
+
+1. Sign in as a patient and request an appointment.
+2. Sign in as a doctor and review the pending request.
+3. Approve or reject the appointment from the provider view.
+4. Update a patient profile or request a department transfer.
+5. Sign in as admin to review audit activity, doctor accounts, and admin approval requests.
+6. Keep both sessions open for a few seconds to show the 10-second live refresh behavior.
 
 ## Key Features
 
