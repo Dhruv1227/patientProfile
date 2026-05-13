@@ -52,6 +52,8 @@ import {
 import { styles } from "./src/styles";
 import { clearSession, restoreSession, saveSession } from "./src/services/sessionStorage";
 
+const PORTAL_REFRESH_INTERVAL_MS = 10000;
+
 function initialPortalTab() {
   try {
     return new URLSearchParams(globalThis?.location?.search || "").get("tab") || "Dashboard";
@@ -231,6 +233,46 @@ export default function App() {
     };
   }, [currentUser?.id]);
 
+  useEffect(() => {
+    if (!currentUser || !authToken || isRestoringSession) return undefined;
+
+    let isMounted = true;
+    let refreshInFlight = false;
+
+    const refreshPortalData = async () => {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+
+      try {
+        await loadPortal(authToken, { syncProfileDraft: false });
+        if (isMounted) setApiStatus("Secure API connected");
+      } catch (error) {
+        if (!isMounted) return;
+
+        if (String(error.message || "").includes("session")) {
+          clearSession();
+          setCurrentUser(null);
+          setAuthToken("");
+          setAuthError("Session expired. Please sign in again.");
+          return;
+        }
+
+        if (!isNetworkError(error)) {
+          setAppError(error.message || "Could not refresh portal data.");
+        }
+      } finally {
+        refreshInFlight = false;
+      }
+    };
+
+    const refreshTimer = setInterval(refreshPortalData, PORTAL_REFRESH_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
+      clearInterval(refreshTimer);
+    };
+  }, [authToken, currentUser?.id, isRestoringSession]);
+
   const searchItems = useMemo(() => {
     const transferItems = transfers.map((transfer) => ({
       title: `Transfer ${transfer.status}`,
@@ -252,7 +294,8 @@ export default function App() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  async function loadPortal(token) {
+  async function loadPortal(token, options = {}) {
+    const { syncProfileDraft = true } = options;
     const data = await apiRequest("/api/portal", { token });
     setAppointments(data.appointments || appointmentSeed);
     setMessages(data.messages || messagesSeed);
@@ -265,7 +308,9 @@ export default function App() {
     setDepartments(departmentsWithDoctors(data.departments || departmentSeed));
     setDoctorSchedules(data.doctorSchedules || doctorScheduleSeed);
     setAuditLogs(data.auditLogs || auditLogSeed);
-    setProfileDraft((data.patientProfile || profileSeed).summary);
+    if (syncProfileDraft) {
+      setProfileDraft((data.patientProfile || profileSeed).summary);
+    }
     setAppError("");
   }
 

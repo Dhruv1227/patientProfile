@@ -4,6 +4,8 @@ CareBridge is a mobile-first patient portal built with React Native, Expo, and a
 
 The project runs in Expo Go on a phone, in Android/iOS simulators, and in the browser through React Native Web.
 
+Recent updates added live portal syncing. When a user is signed in through the backend, the app checks for new portal data every 10 seconds so role-based dashboards stay current during a demo without manually refreshing the browser.
+
 ## Screenshots
 
 | Login | Patient Dashboard | Appointment Booking |
@@ -30,6 +32,7 @@ Admins get the operational view. They can create doctor accounts, approve new ad
 - Secure login backed by JWT authentication
 - Password hashing with bcrypt
 - Browser session restore after refresh
+- Live portal data refresh every 10 seconds after login
 - Inactivity auto-lock for security
 - Mobile-first layout with tablet and desktop support
 - Personalized dashboard for each role
@@ -48,7 +51,25 @@ Admins get the operational view. They can create doctor accounts, approve new ad
 - Admin-only audit log for security activity
 - Hide/show/change controls with no delete action
 - Local JSON persistence for demo state
+- Same-network local sharing for classroom or device demos
 - Screenshot automation for README images and UI checks
+
+## Live Sync Behavior
+
+CareBridge is designed so multiple demo users can interact with the same local backend. For example, a patient can submit an appointment request, and a doctor or admin session can pick up the new data automatically on its next refresh cycle.
+
+The 10-second refresh updates:
+
+- Appointments and appointment statuses
+- Secure messages
+- Notifications
+- Medical records and patient profile changes
+- Doctor schedules
+- Department transfer requests
+- Admin approval requests
+- Audit log activity
+
+The refresh is intentionally not a full page reload. It keeps the current tab, logged-in session, and screen position stable. It also avoids replacing a provider's in-progress patient profile draft while the doctor is typing, so the app feels more like a practical working portal.
 
 ## Demo Clinic Data
 
@@ -97,6 +118,18 @@ You can also start a specific mode:
 ```
 
 The script installs dependencies if needed, starts the backend on `http://localhost:4000`, detects the local network IP for Expo Go, and passes `EXPO_PUBLIC_API_URL` into the app.
+
+## Sharing Locally
+
+For a class presentation or local audience demo, keep the app running on your laptop and share the network URL printed by Expo. It usually looks like this:
+
+```text
+http://YOUR_LAN_IP:8081
+```
+
+People on the same WiFi can open that link in a browser. For Expo Go, they can scan the QR code from the terminal or use the `exp://YOUR_LAN_IP:8081` link shown by Expo.
+
+Do not share `localhost:8081` with other devices. `localhost` only works on the computer running the app.
 
 ## Manual Commands
 
