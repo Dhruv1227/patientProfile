@@ -4,7 +4,7 @@ CareBridge is a mobile-first patient portal built with React Native, Expo, and a
 
 The project runs in Expo Go on a phone, in Android/iOS simulators, and in the browser through React Native Web.
 
-Recent updates added live portal syncing. When a user is signed in through the backend, the app checks for new portal data every 10 seconds so role-based dashboards stay current during a demo without manually refreshing the browser.
+Recent updates added live portal syncing, password reset, routed secure messages, and a cleaner appointment approval workflow. When a user is signed in through the backend, the app checks for new portal data every 10 seconds so role-based dashboards stay current during a demo without manually refreshing the browser.
 
 ## Screenshots
 
@@ -24,13 +24,19 @@ Recent updates added live portal syncing. When a user is signed in through the b
 
 <img src="docs/screenshots/provider-dashboard-desktop.png" width="760" alt="Desktop provider dashboard with wrapped dashboard cards" />
 
+### Secure Message Routing
+
+| Patient Message Flow | Provider Message Flow |
+| --- | --- |
+| <img src="docs/screenshots/patient-messages-mobile.png" width="230" alt="Patient secure message routing screen" /> | <img src="docs/screenshots/provider-messages-desktop.png" width="760" alt="Provider secure message routing screen" /> |
+
 ## What This App Covers
 
 CareBridge has three connected workspaces: patient, provider, and admin. The data is synthetic, but the workflows are designed to behave like a real portal.
 
-Patients can sign in, review their dashboard, search resources, view records, request appointments, and send secure messages. When booking an appointment, they can choose a doctor or leave the field open so the app assigns the doctor with the lightest schedule in that department.
+Patients can sign in, reset a forgotten password, review their dashboard, search resources, view records, request appointments, and send secure messages. When booking an appointment, they can choose a doctor or leave the field open so the app assigns the doctor with the lightest schedule in that department.
 
-Doctors see the patients and requests connected to their own department. They can approve or reject appointment requests, update patient summaries, create new patient profiles, and request a transfer when a patient needs another department.
+Doctors see the patients and requests connected to their own department. They can approve or reject appointment requests, update patient summaries, create new patient profiles, and request a transfer when a patient needs another department. When a doctor approves a new appointment request, the accepted patient is added into that department portfolio so the doctor can continue care from the Records view.
 
 Admins get the operational view. They can create doctor accounts, approve new admin requests, review audit logs, and hide or update content. The admin panel does not delete records, which keeps the demo closer to how a real healthcare system protects history.
 
@@ -39,17 +45,20 @@ Admins get the operational view. They can create doctor accounts, approve new ad
 For a presentation, this sequence shows the connected workflow clearly:
 
 1. Sign in as a patient and request an appointment.
-2. Sign in as a doctor and review the pending request.
-3. Approve or reject the appointment from the provider view.
-4. Update a patient profile or request a department transfer.
-5. Sign in as admin to review audit activity, doctor accounts, and admin approval requests.
-6. Keep both sessions open for a few seconds to show the 10-second live refresh behavior.
+2. Use the message page to route a note to the care team, billing, or pharmacy.
+3. Sign in as a doctor and review the pending request.
+4. Approve the appointment and show that the accepted patient now appears in the provider portfolio.
+5. Update a patient profile or request a department transfer.
+6. Sign in as admin to review audit activity, doctor accounts, and admin approval requests.
+7. Use Forgot password from the login screen to show the local reset-code flow.
+8. Keep both sessions open for a few seconds to show the 10-second live refresh behavior.
 
 ## Key Features
 
 - Separate patient, provider, and admin portals
 - Secure login backed by JWT authentication
 - Password hashing with bcrypt
+- Forgot password flow with a one-time 6-digit demo reset code
 - Browser session restore after refresh
 - Live portal data refresh every 10 seconds after login
 - Inactivity auto-lock for security
@@ -59,8 +68,9 @@ For a presentation, this sequence shows the connected workflow clearly:
 - Patient appointment booking with department and doctor selection
 - Automatic doctor assignment based on schedule capacity
 - Doctor approve/reject workflow for appointment requests
+- Approved appointment patients are added to the provider's department portfolio
 - Doctor schedule conflict checks
-- Secure messages scoped by role
+- Secure messages scoped by role, route, category, and patient context
 - Medical records scoped by patient, provider department, and admin access
 - Patient profile updates with notifications
 - Department transfer requests between provider teams
@@ -80,6 +90,7 @@ CareBridge is designed so multiple demo users can interact with the same local b
 The 10-second refresh updates:
 
 - Appointments and appointment statuses
+- Provider portfolio changes after approved appointments
 - Secure messages
 - Notifications
 - Medical records and patient profile changes
@@ -227,12 +238,20 @@ Admin: admin@care.test
 
 The full list of seeded doctor and patient accounts is available in [DEMO_CREDENTIALS.md](DEMO_CREDENTIALS.md).
 
+## Password Reset
+
+The login screen includes a Forgot password flow. For this local demo, the backend generates a 6-digit reset code, stores only a hashed version, expires it after 10 minutes, and shows the code on screen so the reset can be demonstrated without connecting an email or SMS service.
+
+In a production version, that same code should be delivered through email or SMS instead of being displayed in the app.
+
 ## API Routes
 
 ```text
 GET    /api/health
 POST   /api/auth/login
 POST   /api/auth/register
+POST   /api/auth/forgot-password
+POST   /api/auth/reset-password
 GET    /api/portal
 GET    /api/search
 GET    /api/audit-logs

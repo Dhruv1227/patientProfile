@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -130,6 +131,8 @@ let auditLogs = [
 
 let persistenceReady = false;
 let saveTimer = null;
+let passwordResetRequests = [];
+const PASSWORD_RESET_TTL_MS = 10 * 60 * 1000;
 
 function serializableState() {
   return {
@@ -167,6 +170,15 @@ function queueSave() {
   if (!persistenceReady) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveStateNow, 50);
+}
+
+function createPasswordResetCode() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+function pruneExpiredPasswordResetRequests() {
+  const now = Date.now();
+  passwordResetRequests = passwordResetRequests.filter((request) => request.expiresAt > now && request.attempts < 5);
 }
 
 function addAuditLog(user, action, detail, severity = "Info") {
@@ -469,6 +481,7 @@ function ensureClinicalCoverage() {
       patientName: "Maya Patel"
     };
   }
+  appointments.filter((appointment) => appointment.status === "Approved").forEach(ensureAcceptedAppointmentPatient);
   patientRecords = patientRecords.map((record, index) => ({
     id: record.id || `rec-${record.patientId || "unknown"}-${index}`,
     hidden: false,
@@ -605,7 +618,10 @@ function canProviderAccessPatient(user, patientId) {
   if (user.role !== "Provider") return false;
   const departmentIds = providerDepartmentIds(user);
   return departments.some((department) =>
-    departmentIds.includes(department.id) && department.patients.some((patient) => patient.id === patientId)
+    departmentIds.includes(department.id) &&
+      department.patients.some(
+        (patient) => patient.id === patientId || patient.userId === patientId || patient.linkedPatientId === patientId
+      )
   );
 }
 
@@ -624,6 +640,70 @@ function findPatientDepartment(patientId) {
     }
   }
   return null;
+}
+
+function findPatientForAppointment(appointment) {
+  if (!appointment) return null;
+  for (const department of departments) {
+    const patient = department.patients.find(
+      (candidate) =>
+        candidate.id === appointment.patientId ||
+        candidate.userId === appointment.patientId ||
+        (appointment.patientName && candidate.name === appointment.patientName)
+    );
+    if (patient) return { department, patient };
+  }
+  return null;
+}
+
+function ensureAcceptedAppointmentPatient(appointment) {
+  if (!appointment?.departmentId) return null;
+  const targetDepartment = departments.find((department) => department.id === appointment.departmentId);
+  if (!targetDepartment) return null;
+
+  const existingTargetPatient = targetDepartment.patients.find(
+    (patient) =>
+      patient.id === appointment.patientId ||
+      patient.userId === appointment.patientId ||
+      (appointment.patientName && patient.name === appointment.patientName)
+  );
+  if (existingTargetPatient) return existingTargetPatient;
+
+  const source = findPatientForAppointment(appointment);
+  const sourcePatient = source?.patient || {};
+  const patient = {
+    id: appointment.patientId || sourcePatient.id || `p${Date.now()}`,
+    ...(sourcePatient.id && sourcePatient.id !== appointment.patientId ? { linkedPatientId: sourcePatient.id } : {}),
+    ...(appointment.patientId && sourcePatient.id && sourcePatient.id !== appointment.patientId ? { userId: appointment.patientId } : {}),
+    name: appointment.patientName || sourcePatient.name || "Accepted patient",
+    age: sourcePatient.age || "Not recorded",
+    status: "Accepted",
+    nextVisit: appointment.date || sourcePatient.nextVisit || "Scheduled",
+    concern: appointment.title || sourcePatient.concern || appointment.detail || "Accepted appointment"
+  };
+
+  targetDepartment.patients = [patient, ...targetDepartment.patients];
+
+  const patientForRecords = {
+    ...patient,
+    departmentId: targetDepartment.id,
+    departmentName: targetDepartment.name,
+    departmentLead: targetDepartment.lead
+  };
+  if (!patientProfiles[patient.id]) {
+    patientProfiles[patient.id] = sourcePatient.id && patientProfiles[sourcePatient.id]
+      ? { ...patientProfiles[sourcePatient.id], patientId: patient.id, patientName: patient.name, updatedAt: appointment.date || "Accepted" }
+      : defaultProfileForPatient(patientForRecords);
+  }
+  const hasDepartmentRecord = patientRecords.some((record) => record.patientId === patient.id && record.departmentId === targetDepartment.id);
+  if (!hasDepartmentRecord) {
+    patientRecords = [
+      ...recordsForPatient(patientForRecords).map((record) => ({ ...record, id: `${record.id}-${targetDepartment.id}` })),
+      ...patientRecords
+    ];
+  }
+
+  return patient;
 }
 
 function patientIdsForUser(user) {
@@ -650,6 +730,15 @@ function messageVisibleToUser(user, item) {
     return doctorIds.includes(item.doctorId) || departmentIds.includes(item.departmentId) || item.senderId === user.id || item.receiverId === user.id;
   }
   return false;
+}
+
+function findMessagePatient(patientId) {
+  if (!patientId) return null;
+  for (const department of departments) {
+    const patient = department.patients.find((candidate) => candidate.id === patientId || candidate.userId === patientId);
+    if (patient) return { department, patient };
+  }
+  return null;
 }
 
 function recordVisibleToUser(user, item) {
@@ -748,6 +837,77 @@ app.post("/api/auth/login", async (req, res) => {
 
   addAuditLog(user, "Successful login", `${user.email} signed in as ${user.role}.`, "Info");
   res.json({ token: createToken(user), user: publicUser(user) });
+});
+
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const email = String(req.body.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ message: "Enter the email address for the portal account." });
+
+  pruneExpiredPasswordResetRequests();
+  const user = users.find((candidate) => candidate.email === email);
+  if (!user) {
+    addAuditLog(null, "Password reset requested", `Password reset was requested for an unknown email: ${email}.`, "Warning");
+    queueSave();
+    return res.json({ message: "If that account exists, a reset code has been prepared." });
+  }
+
+  const resetCode = createPasswordResetCode();
+  const codeHash = await bcrypt.hash(resetCode, 10);
+  passwordResetRequests = [
+    {
+      id: `reset-${Date.now()}`,
+      userId: user.id,
+      email,
+      codeHash,
+      expiresAt: Date.now() + PASSWORD_RESET_TTL_MS,
+      attempts: 0
+    },
+    ...passwordResetRequests.filter((request) => request.email !== email)
+  ];
+
+  addAuditLog(user, "Password reset requested", `${user.email} requested a password reset code.`, "Warning");
+  queueSave();
+  res.json({
+    message: "Reset code created. Enter it with a new password.",
+    resetCode,
+    expiresInMinutes: Math.round(PASSWORD_RESET_TTL_MS / 60000)
+  });
+});
+
+app.post("/api/auth/reset-password", async (req, res) => {
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const code = String(req.body.code || "").trim();
+  const password = String(req.body.password || "");
+
+  if (!email || !code || password.length < 6) {
+    return res.status(400).json({ message: "Enter email, reset code, and a new password with at least 6 characters." });
+  }
+
+  pruneExpiredPasswordResetRequests();
+  const user = users.find((candidate) => candidate.email === email);
+  const request = passwordResetRequests.find((candidate) => candidate.email === email);
+  if (!user || !request) {
+    addAuditLog(null, "Password reset failed", `Invalid or expired password reset attempt for ${email}.`, "Warning");
+    queueSave();
+    return res.status(400).json({ message: "Reset code is invalid or expired." });
+  }
+
+  request.attempts += 1;
+  const codeMatches = await bcrypt.compare(code, request.codeHash);
+  if (!codeMatches) {
+    if (request.attempts >= 5) {
+      passwordResetRequests = passwordResetRequests.filter((candidate) => candidate.id !== request.id);
+    }
+    addAuditLog(user, "Password reset failed", `${user.email} entered an invalid reset code.`, "Warning");
+    queueSave();
+    return res.status(400).json({ message: "Reset code is invalid or expired." });
+  }
+
+  user.passwordHash = await bcrypt.hash(password, 10);
+  passwordResetRequests = passwordResetRequests.filter((candidate) => candidate.userId !== user.id);
+  addAuditLog(user, "Password reset completed", `${user.email} updated their password using reset verification.`, "Critical");
+  queueSave();
+  res.json({ message: "Password updated. You can sign in with the new password." });
 });
 
 app.post("/api/auth/register", async (req, res) => {
@@ -949,6 +1109,7 @@ app.patch("/api/appointments/:id/status", requireAuth, (req, res) => {
 
   appointment.status = status;
   appointment.tag = status;
+  const acceptedPatient = status === "Approved" ? ensureAcceptedAppointmentPatient(appointment) : null;
   if (appointment.doctorId && doctorSchedules[appointment.doctorId]) {
     doctorSchedules[appointment.doctorId] = doctorSchedules[appointment.doctorId].map((slot) =>
       slot.appointmentId === appointment.id ? { ...slot, status } : slot
@@ -966,12 +1127,33 @@ app.patch("/api/appointments/:id/status", requireAuth, (req, res) => {
       tag: status,
       hidden: false
     },
+    ...(acceptedPatient
+      ? [{
+          id: `n-roster-${Date.now()}`,
+          audience: "Provider",
+          doctorId: appointment.doctorId,
+          patientId: acceptedPatient.id,
+          title: "Patient added to portfolio",
+          detail: `${acceptedPatient.name} is now visible in your ${appointment.departmentName || "department"} patient panel.`,
+          date: "Just now",
+          tag: "Portfolio",
+          hidden: false
+        }]
+      : []),
     ...notifications
   ];
   queueSave();
 
   const scoped = scopedPortalData(req.user);
-  res.json({ appointment, appointments: scoped.appointments, notifications: scoped.notifications, doctorSchedules });
+  res.json({
+    appointment,
+    appointments: scoped.appointments,
+    notifications: scoped.notifications,
+    doctorSchedules,
+    departments,
+    patientProfiles: scoped.patientProfiles,
+    records: scoped.records
+  });
 });
 
 app.patch("/api/patient-profile", requireAuth, (req, res) => {
@@ -1424,36 +1606,78 @@ app.patch("/api/admin/items/:collection/:id", requireAuth, (req, res) => {
 app.post("/api/messages", requireAuth, (req, res) => {
   const detail = String(req.body.detail || "").trim();
   if (!detail) return res.status(400).json({ message: "Message cannot be empty." });
+  const subject = String(req.body.subject || "").trim();
+  const category = String(req.body.category || "Care").trim() || "Care";
+  const requestedRecipientRole = ["Patient", "Provider", "Admin"].includes(req.body.recipientRole) ? req.body.recipientRole : "";
+  const recipientLabel = String(req.body.recipientLabel || requestedRecipientRole || "Care Team").trim();
+  const providerDepartmentIdsForUser = providerDepartmentIds(req.user);
+  const providerDepartment = req.user.role === "Provider" ? departments.find((department) => providerDepartmentIdsForUser.includes(department.id)) : null;
   const patientIds = req.user.role === "Patient" ? patientIdsForUser(req.user) : [];
-  const patientDepartment =
+  const requestedPatientId = String(req.body.patientId || "").trim();
+  const senderPatientMatch = req.user.role === "Patient" ? patientIds.map((patientId) => findMessagePatient(patientId)).find(Boolean) : null;
+  const selectedPatientMatch = requestedPatientId ? findMessagePatient(requestedPatientId) : senderPatientMatch;
+
+  if (req.user.role === "Provider" && requestedRecipientRole === "Patient") {
+    if (!selectedPatientMatch) return res.status(400).json({ message: "Select a patient before sending a patient message." });
+    if (!canProviderAccessPatient(req.user, selectedPatientMatch.patient.id)) return res.status(403).json({ message: "Provider cannot message a patient outside their department." });
+  }
+
+  if (req.user.role === "Provider" && selectedPatientMatch && !canProviderAccessPatient(req.user, selectedPatientMatch.patient.id)) {
+    return res.status(403).json({ message: "Provider cannot attach messages to a patient outside their department." });
+  }
+
+  const receiverRole =
     req.user.role === "Patient"
-      ? departments.find((department) => department.patients.some((patient) => patientIds.includes(patient.id)))
-      : null;
-  const providerDepartment =
-    req.user.role === "Provider"
-      ? departments.find((department) => providerDepartmentIds(req.user).includes(department.id))
-      : null;
+      ? requestedRecipientRole === "Admin" ? "Admin" : "Provider"
+      : req.user.role === "Provider"
+        ? requestedRecipientRole === "Patient" ? "Patient" : "Admin"
+        : requestedRecipientRole === "Provider" ? "Provider" : "Patient";
+  const patientId = req.user.role === "Patient" ? senderPatientMatch?.patient.id || patientIds[0] || req.user.id : selectedPatientMatch?.patient.id || "";
+  const patientName = req.user.role === "Patient" ? senderPatientMatch?.patient.name || req.user.name : selectedPatientMatch?.patient.name || "";
+  const departmentId = selectedPatientMatch?.department.id || providerDepartment?.id || "";
+  const doctorId =
+    receiverRole === "Provider"
+      ? selectedPatientMatch?.department.doctors?.[0]?.id || providerDoctorIds(req.user)[0] || ""
+      : providerDoctorIds(req.user)[0] || selectedPatientMatch?.department.doctors?.[0]?.id || "";
+  const title = subject || `${req.user.name} to ${recipientLabel}`;
 
   const message = {
     id: `m${Date.now()}`,
-    title: req.user.role === "Patient" ? `${req.user.name} to Care Team` : `${req.user.name} secure note`,
+    title,
     detail,
     date: "Just now",
-    tag: req.user.role === "Patient" ? "Patient" : "Provider",
+    tag: category,
     senderId: req.user.id,
     senderRole: req.user.role,
-    receiverRole: req.user.role === "Patient" ? "Provider" : "Admin",
-    patientId: req.user.role === "Patient" ? patientIds[0] || req.user.id : String(req.body.patientId || ""),
-    patientName: req.user.role === "Patient" ? req.user.name : String(req.body.patientName || ""),
-    departmentId: patientDepartment?.id || providerDepartment?.id || "",
-    doctorId: providerDoctorIds(req.user)[0] || patientDepartment?.doctors?.[0]?.id || "",
+    receiverRole,
+    recipientLabel,
+    patientId,
+    patientName,
+    departmentId,
+    doctorId,
     hidden: false
   };
 
   messages = [message, ...messages];
+  notifications = [
+    {
+      id: `n-msg-${Date.now()}`,
+      audience: receiverRole,
+      patientId,
+      departmentId,
+      doctorId: receiverRole === "Provider" ? doctorId : "",
+      title: "New secure message",
+      detail: `${req.user.name}: ${title}`,
+      date: "Just now",
+      tag: "Message",
+      hidden: false
+    },
+    ...notifications
+  ];
   addAuditLog(req.user, "Secure message sent", `${req.user.name} sent a secure message to care team.`, "Info");
   queueSave();
-  res.status(201).json({ message, messages: scopedPortalData(req.user).messages });
+  const scoped = scopedPortalData(req.user);
+  res.status(201).json({ message, messages: scoped.messages, notifications: scoped.notifications });
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

@@ -179,6 +179,21 @@ export const styles = StyleSheet.create({
     color: palette.rose,
     fontWeight: "700"
   },
+  successText: {
+    color: palette.green,
+    fontWeight: "800",
+    lineHeight: 20
+  },
+  textButton: {
+    minHeight: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8
+  },
+  textButtonText: {
+    color: palette.teal,
+    fontWeight: "900"
+  },
   accessNotice: {
     backgroundColor: palette.softer,
     borderRadius: 8,

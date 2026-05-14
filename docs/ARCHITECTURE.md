@@ -21,8 +21,11 @@ CareBridge is intentionally small enough for Expo Go presentation, but the app n
 - Audit logs are saved with the rest of the portal state.
 - Provider actions are scoped to assigned departments and doctor schedules.
 - Provider patient transfers require access to the source department, create a pending request, notify receiving doctors, and only move the patient after an accepted decision.
+- Approved appointment requests add the accepted patient into the provider's target department portfolio with profile and record context.
 - Messages, search results, records, notifications, appointments, and transfers share role-scoping rules.
+- Secure messages now carry route, category, subject, patient, department, sender, receiver, and doctor context.
 - Patient records and patient profile summaries are now stored per patient instead of as one shared chart.
+- Password reset uses an expiring hashed verification code for the local demo flow.
 - Admin-created doctors are attached to departments and receive schedule records.
 - Secrets and runtime state stay out of git through `.gitignore`.
 
@@ -87,3 +90,4 @@ src/
 - Replace `JWT_SECRET` in `.env` before presenting anything beyond local testing.
 - Do not commit `.env`, `backend/data`, `.expo`, `dist`, or real user information.
 - Demo passwords are only for local testing and should not be reused anywhere.
+- The local reset code is displayed on screen for classroom demonstration only; a production build should send the code through email/SMS and never echo it in the client response.

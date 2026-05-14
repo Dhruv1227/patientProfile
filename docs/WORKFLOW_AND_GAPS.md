@@ -45,11 +45,13 @@ flowchart TD
 4. If a backend JWT exists, the app reloads `/api/portal`.
 5. If the JWT expired, the app clears the session and asks the user to sign in again.
 6. If no session exists, the login/register screen is shown.
-7. Patient/provider registration returns a JWT and public user profile.
-8. Admin registration creates a pending approval request instead of direct access.
-9. A current admin must approve the request before the new admin can sign in.
-10. The app saves a safe session and loads role-specific data.
-11. Sign out clears the local session.
+7. If a user forgets their password, they can request a 6-digit demo reset code.
+8. Backend stores a hashed reset code, expires it after 10 minutes, and verifies it before changing the password.
+9. Patient/provider registration returns a JWT and public user profile.
+10. Admin registration creates a pending approval request instead of direct access.
+11. A current admin must approve the request before the new admin can sign in.
+12. The app saves a safe session and loads role-specific data.
+13. Sign out clears the local session.
 
 Current files:
 
@@ -71,7 +73,9 @@ Current files:
 10. Doctor approves or rejects.
 11. Appointment status and doctor schedule status are updated.
 12. Patient receives a notification.
-13. Audit log records the action.
+13. If approved, the patient is added to the provider's target department portfolio.
+14. Department-scoped profile and records become visible to that provider.
+15. Audit log records the action.
 
 Main API routes:
 
@@ -187,6 +191,9 @@ The following gaps from the first review have now been converted into working pr
 | Admin hierarchy | New admin registration now creates a pending request. Existing admins approve or reject access before the account can login. |
 | Visible error handling | Sync and validation failures now show a visible dismissible app message instead of silently falling back. |
 | Auto-lock | The app now locks/signs out the browser session after inactivity. |
+| Password reset | The login screen now has a reset flow with a hashed, expiring 6-digit demo code. |
+| Message routing polish | Message compose now includes recipient route, category, subject, route preview, and patient context for providers/admins. |
+| Accepted patient portfolio | Approved appointments now add the accepted patient into the provider's department portfolio with profile/record context. |
 
 ## Current Gap Analysis
 
@@ -202,13 +209,12 @@ The following gaps from the first review have now been converted into working pr
 | Gap | Current State | Risk | Recommended Fix |
 | --- | --- | --- | --- |
 | Validation is basic | Backend validates some required fields but accepts broad strings. | Bad or inconsistent demo data can enter state. | Add schemas with Zod/Joi or explicit validators. |
-| Real-time sync | The UI reloads data after actions and keeps local state in sync for the current session. | Separate devices may need refresh to see every update. | Add WebSockets, Server-Sent Events, Firebase realtime, or periodic polling. |
+| Real-time sync | Signed-in sessions poll the backend every 10 seconds and actions reload scoped data. | Good for demos, but true instant collaboration still needs push updates. | Add WebSockets, Server-Sent Events, Firebase realtime, or managed subscriptions. |
 
 ### Lower Priority Gaps
 
 | Gap | Current State | Recommended Fix |
 | --- | --- | --- |
-| Password reset | Not implemented. | Add forgot-password demo flow or admin reset flow. |
 | MFA is visual | MFA status/toggle is demo UI only. | Document as simulated or integrate real MFA. |
 | Auto-lock polish | Inactivity lock exists, but there is no dedicated lock-screen PIN. | Add a lock screen with quick re-auth. |
 | File uploads | No upload for insurance card, lab files, images, or documents. | Add local file picker and backend attachment model. |
@@ -232,13 +238,15 @@ Use this sequence to show the project as a practical clinic application:
 3. Leave doctor unselected once to show automatic assignment.
 4. Login as the assigned doctor.
 5. Approve or reject the pending appointment.
-6. Return to the patient account and show the notification.
-7. Login as doctor again.
-8. Update a selected patient's profile.
-9. Transfer that patient to another department.
-10. Login as a receiving department doctor and show the incoming transfer notification.
-11. Login as admin.
-12. Show doctor creation, hide/change controls, and read-only audit logs.
+6. Show that an approved patient appears in the provider portfolio.
+7. Return to the patient account and show the notification.
+8. Login as doctor again.
+9. Update a selected patient's profile.
+10. Transfer that patient to another department.
+11. Login as a receiving department doctor and show the incoming transfer notification.
+12. Login as admin.
+13. Show doctor creation, hide/change controls, and read-only audit logs.
+14. Use Forgot password on the login page to demonstrate account recovery.
 
 ## Definition Of Done For A More Practical Version
 
@@ -251,4 +259,6 @@ The app becomes closer to a real-world portal when these are true:
 - Refresh, backend restart, and Expo Go reload do not lose the active demo state.
 - Search never returns data outside the user's permission scope.
 - Transfers and appointment decisions produce visible notifications for all affected roles.
+- Approved appointments place the accepted patient into the correct provider portfolio.
+- Password reset uses expiring verification rather than directly changing passwords.
 - The README clearly explains how to run the demo on web and mobile.

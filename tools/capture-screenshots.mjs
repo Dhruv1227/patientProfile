@@ -80,15 +80,12 @@ const scenarios = [
   { name: "login-mobile", user: null },
   { name: "patient-dashboard-mobile", user: users.patient },
   { name: "patient-appointments-mobile", user: users.patient, tab: "Appointments", tabText: "Visits" },
+  { name: "patient-messages-mobile", user: users.patient, tab: "Messages", tabText: "Messages" },
   { name: "provider-dashboard-desktop", user: users.dermatologist, viewport: desktopViewport },
+  { name: "provider-messages-desktop", user: users.dermatologist, tab: "Messages", tabText: "Messages", viewport: desktopViewport },
   { name: "admin-panel-mobile", user: users.admin, tab: "Admin", tabText: "Admin" },
-  { name: "admin-panel-desktop", user: users.admin, tab: "Admin", tabText: "Admin", viewport: desktopViewport },
   { name: "admin-approval-mobile", user: users.admin, tab: "Admin", tabText: "Admin", scrollText: "Admin Approval Hierarchy" },
-  { name: "admin-approval-desktop", user: users.admin, tab: "Admin", tabText: "Admin", viewport: desktopViewport, scrollText: "Admin Approval Hierarchy" },
-  { name: "provider-records-mobile", user: users.provider, tab: "Records", tabText: "Records" },
-  { name: "provider-transfers-mobile", user: users.provider, tab: "Records", tabText: "Records", scrollText: "Incoming Transfer Requests" },
-  { name: "provider-transfers-desktop", user: users.dermatologist, tab: "Records", tabText: "Records", viewport: desktopViewport, scrollText: "Incoming Transfer Requests" },
-  { name: "provider-records-desktop", user: users.dermatologist, tab: "Records", tabText: "Records", viewport: desktopViewport }
+  { name: "provider-transfers-mobile", user: users.provider, tab: "Records", tabText: "Records", scrollText: "Incoming Transfer Requests" }
 ];
 
 function contentType(filePath) {

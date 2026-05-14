@@ -267,14 +267,120 @@ function AppointmentsView({ appointmentForm, appointments, currentUser, departme
   );
 }
 
-function MessagesView({ messageDraft, messages, notifications, role, sendMessage, setMessageDraft }) {
+function optionForRole(role) {
+  if (role === "Patient") {
+    return [
+      { label: "Care Team", recipientRole: "Provider", category: "Care", subject: "Care question" },
+      { label: "Billing", recipientRole: "Admin", category: "Billing", subject: "Billing question" },
+      { label: "Pharmacy", recipientRole: "Provider", category: "Medication", subject: "Medication question" }
+    ];
+  }
+  if (role === "Provider") {
+    return [
+      { label: "Patient", recipientRole: "Patient", category: "Care", subject: "Care team update" },
+      { label: "Admin", recipientRole: "Admin", category: "Operations", subject: "Operational note" }
+    ];
+  }
+  return [
+    { label: "Patient", recipientRole: "Patient", category: "Portal", subject: "Portal update" },
+    { label: "Provider", recipientRole: "Provider", category: "Operations", subject: "Admin note" }
+  ];
+}
+
+function MessagesView({ currentUser, departments, messageDraft, messageForm, messages, notifications, role, sendMessage, setMessageDraft, setMessageForm }) {
   const roleNotifications = notifications.filter((item) => role === "Admin" || item.audience === role);
+  const recipientOptions = optionForRole(role);
+  React.useEffect(() => {
+    if (!recipientOptions.some((option) => option.label === messageForm.recipientLabel)) {
+      const defaultOption = recipientOptions[0];
+      setMessageForm((current) => ({
+        ...current,
+        recipientRole: defaultOption.recipientRole,
+        recipientLabel: defaultOption.label,
+        category: defaultOption.category,
+        subject: defaultOption.subject
+      }));
+    }
+  }, [messageForm.recipientLabel, recipientOptions, setMessageForm]);
+  const categories = role === "Patient" ? ["Care", "Billing", "Medication", "Lab"] : ["Care", "Operations", "Follow-up", "Referral"];
+  const patientOptions = departments.flatMap((department) => department.patients.map((patient) => ({ ...patient, departmentName: department.name })));
+  const selectedPatient = patientOptions.find((patient) => patient.id === messageForm.patientId) || patientOptions[0];
+  const showPatientPicker = role !== "Patient" && patientOptions.length > 0;
+  const recipientName =
+    role === "Patient"
+      ? messageForm.recipientLabel
+      : messageForm.recipientRole === "Patient"
+        ? selectedPatient?.name || "selected patient"
+        : messageForm.recipientLabel;
+  const routeDetail =
+    role === "Patient"
+      ? `From ${currentUser.name} to ${messageForm.recipientLabel}. This message is attached to the patient's care record.`
+      : selectedPatient
+        ? `From ${currentUser.name} to ${recipientName}. Patient context: ${selectedPatient.name}, ${selectedPatient.departmentName}.`
+        : `From ${currentUser.name} to ${recipientName}.`;
+  const updateMessageForm = (patch) => setMessageForm((current) => ({ ...current, ...patch }));
+
   return (
     <View style={styles.screen}>
       <PageHeader title="Messages" subtitle="Secure communication with providers, billing, and care coordination." />
       <Panel title={`${role} Notifications`} items={roleNotifications} />
-      <View style={styles.panel}>
+      <View style={[styles.panel, styles.flowPanel]}>
         <Text style={styles.panelTitle}>New Secure Message</Text>
+        <Text style={styles.inputLabel}>Route message to</Text>
+        <View style={styles.filterWrap}>
+          {recipientOptions.map((option) => {
+            const active = messageForm.recipientLabel === option.label;
+            return (
+              <TouchableOpacity
+                key={option.label}
+                style={[styles.filterPill, active && styles.filterPillActive]}
+                onPress={() => updateMessageForm({
+                  recipientRole: option.recipientRole,
+                  recipientLabel: option.label,
+                  category: option.category,
+                  subject: option.subject
+                })}
+              >
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>{option.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {showPatientPicker ? (
+          <>
+            <Text style={styles.inputLabel}>{messageForm.recipientRole === "Patient" ? "Patient recipient" : "Patient context"}</Text>
+            <View style={styles.filterWrap}>
+              {patientOptions.map((patient) => {
+                const active = (messageForm.patientId || selectedPatient?.id) === patient.id;
+                return (
+                  <TouchableOpacity
+                    key={patient.id}
+                    style={[styles.filterPill, active && styles.filterPillActive]}
+                    onPress={() => updateMessageForm({ patientId: patient.id })}
+                  >
+                    <Text style={[styles.filterText, active && styles.filterTextActive]}>{patient.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
+        <Text style={styles.inputLabel}>Message category</Text>
+        <View style={styles.filterWrap}>
+          {categories.map((category) => {
+            const active = messageForm.category === category;
+            return (
+              <TouchableOpacity
+                key={category}
+                style={[styles.filterPill, active && styles.filterPillActive]}
+                onPress={() => updateMessageForm({ category })}
+              >
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>{category}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Field label="Subject" value={messageForm.subject} onChangeText={(subject) => updateMessageForm({ subject })} />
         <TextInput
           style={styles.messageInput}
           multiline
@@ -283,6 +389,14 @@ function MessagesView({ messageDraft, messages, notifications, role, sendMessage
           onChangeText={setMessageDraft}
           placeholder="Write a message to your care team..."
           placeholderTextColor="#82918d"
+        />
+        <RecordCard
+          item={{
+            title: "Route preview",
+            detail: routeDetail,
+            date: messageForm.category,
+            tag: messageForm.recipientLabel
+          }}
         />
         <TouchableOpacity style={styles.primaryButton} onPress={sendMessage}>
           <Text style={styles.primaryButtonText}>Send Message</Text>

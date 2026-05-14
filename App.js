@@ -68,11 +68,17 @@ export default function App() {
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [authMode, setAuthMode] = useState("login");
   const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
     role: "Patient"
+  });
+  const [resetForm, setResetForm] = useState({
+    email: "",
+    code: "",
+    password: ""
   });
   const [activeTab, setActiveTab] = useState(initialPortalTab);
   const [query, setQuery] = useState("");
@@ -116,6 +122,13 @@ export default function App() {
   const [apiStatus, setApiStatus] = useState("Offline continuity mode");
   const [appError, setAppError] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
+  const [messageForm, setMessageForm] = useState({
+    recipientRole: "Provider",
+    recipientLabel: "Care Team",
+    category: "Care",
+    subject: "Care question",
+    patientId: ""
+  });
   const [appointmentForm, setAppointmentForm] = useState({
     departmentId: "dept-primary",
     doctorId: "",
@@ -294,6 +307,24 @@ export default function App() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function updateResetForm(key, value) {
+    setResetForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function switchAuthMode(mode) {
+    setAuthMode(mode);
+    setAuthError("");
+    setAuthNotice("");
+    if (mode === "forgot") {
+      setResetForm((current) => ({
+        ...current,
+        email: current.email || form.email.trim().toLowerCase(),
+        code: "",
+        password: ""
+      }));
+    }
+  }
+
   async function loadPortal(token, options = {}) {
     const { syncProfileDraft = true } = options;
     const data = await apiRequest("/api/portal", { token });
@@ -355,8 +386,64 @@ export default function App() {
     clearSession();
   }
 
+  async function requestPasswordReset() {
+    setAuthError("");
+    setAuthNotice("");
+    const email = (resetForm.email || form.email).trim().toLowerCase();
+    if (!email) {
+      setAuthError("Enter the account email first.");
+      return;
+    }
+
+    try {
+      const data = await apiRequest("/api/auth/forgot-password", {
+        method: "POST",
+        body: { email }
+      });
+      setResetForm((current) => ({ ...current, email, code: data.resetCode || current.code }));
+      setAuthNotice(
+        data.resetCode
+          ? `Demo reset code: ${data.resetCode}. It expires in ${data.expiresInMinutes || 10} minutes.`
+          : data.message || "If that account exists, a reset code has been prepared."
+      );
+      setApiStatus("Password reset code ready");
+    } catch (error) {
+      setApiStatus("Offline continuity mode");
+      setAuthError(isNetworkError(error) ? "Password reset needs the backend server running." : error.message || "Reset code could not be created.");
+    }
+  }
+
+  async function completePasswordReset() {
+    setAuthError("");
+    const email = resetForm.email.trim().toLowerCase();
+    if (!email || !resetForm.code.trim() || resetForm.password.length < 6) {
+      setAuthError("Enter email, reset code, and a new password with at least 6 characters.");
+      return;
+    }
+
+    try {
+      const data = await apiRequest("/api/auth/reset-password", {
+        method: "POST",
+        body: {
+          email,
+          code: resetForm.code,
+          password: resetForm.password
+        }
+      });
+      setForm((current) => ({ ...current, email, password: "" }));
+      setResetForm({ email: "", code: "", password: "" });
+      setAuthMode("login");
+      setAuthNotice(data.message || "Password updated. You can sign in now.");
+      setApiStatus("Password reset completed");
+    } catch (error) {
+      setApiStatus("Offline continuity mode");
+      setAuthError(isNetworkError(error) ? "Password reset needs the backend server running." : error.message || "Password could not be reset.");
+    }
+  }
+
   async function handleAuth() {
     setAuthError("");
+    setAuthNotice("");
     const normalizedEmail = form.email.trim().toLowerCase();
 
     if (authMode === "register") {
@@ -531,15 +618,29 @@ export default function App() {
 
   async function sendMessage() {
     if (!messageDraft.trim()) return;
+    const departmentPatients = scopedDepartments.flatMap((department) => department.patients || []);
+    const selectedMessagePatientId =
+      currentUser.role === "Patient"
+        ? currentUser.id
+        : messageForm.patientId || departmentPatients[0]?.id || selectedProfilePatientId || "";
+    const messagePayload = {
+      detail: messageDraft.trim(),
+      subject: messageForm.subject,
+      category: messageForm.category,
+      recipientRole: messageForm.recipientRole,
+      recipientLabel: messageForm.recipientLabel,
+      patientId: selectedMessagePatientId
+    };
 
     if (authToken) {
       try {
         const data = await apiRequest("/api/messages", {
           method: "POST",
           token: authToken,
-          body: { detail: messageDraft.trim() }
+          body: messagePayload
         });
         setMessages(data.messages);
+        if (data.notifications) setNotifications(data.notifications);
         setMessageDraft("");
         setApiStatus("Secure API connected");
         return;
@@ -552,14 +653,15 @@ export default function App() {
     setMessages((current) => [
       {
         id: `m-${Date.now()}`,
-        title: currentUser.role === "Patient" ? "You to Care Team" : `${currentUser.name} secure note`,
-        detail: messageDraft.trim(),
+        title: messageForm.subject || (currentUser.role === "Patient" ? "You to Care Team" : `${currentUser.name} secure note`),
+        detail: `${messageForm.recipientLabel}: ${messageDraft.trim()}`,
         date: "Just now",
-        tag: currentUser.role === "Patient" ? "Patient" : "Provider",
+        tag: messageForm.category || currentUser.role,
         senderId: currentUser.id,
         senderRole: currentUser.role,
-        receiverRole: currentUser.role === "Patient" ? "Provider" : "Admin",
-        patientId: currentUser.role === "Patient" ? currentUser.id : selectedProfilePatientId,
+        receiverRole: messageForm.recipientRole,
+        recipientLabel: messageForm.recipientLabel,
+        patientId: selectedMessagePatientId,
         departmentId: scopedDepartments[0]?.id,
         doctorId: scopedDepartments[0]?.doctors?.[0]?.id,
         hidden: false
@@ -580,6 +682,9 @@ export default function App() {
         setAppointments(data.appointments);
         setNotifications(data.notifications || notifications);
         setDoctorSchedules(data.doctorSchedules || doctorSchedules);
+        setDepartments(departmentsWithDoctors(data.departments || departments));
+        setPatientProfiles(data.patientProfiles || patientProfiles);
+        setMedicalRecords(data.records || medicalRecords);
         await loadPortal(authToken);
         return;
       } catch (error) {
@@ -595,6 +700,25 @@ export default function App() {
         ...current,
         [target.doctorId]: (current[target.doctorId] || []).map((slot) => (slot.appointmentId === id ? { ...slot, status } : slot))
       }));
+    }
+    if (status === "Approved" && target?.departmentId) {
+      setDepartments((currentDepartments) => {
+        const sourcePatient = currentDepartments.flatMap((department) => department.patients).find((patient) => patient.id === target.patientId || patient.name === target.patientName);
+        return currentDepartments.map((department) => {
+          if (department.id !== target.departmentId) return department;
+          const alreadyAssigned = department.patients.some((patient) => patient.id === target.patientId || patient.name === target.patientName);
+          if (alreadyAssigned) return department;
+          const acceptedPatient = {
+            id: target.patientId || `accepted-${Date.now()}`,
+            name: target.patientName || sourcePatient?.name || "Accepted patient",
+            age: sourcePatient?.age || "Not recorded",
+            status: "Accepted",
+            nextVisit: target.date || "Scheduled",
+            concern: target.title || sourcePatient?.concern || "Accepted appointment"
+          };
+          return { ...department, patients: [acceptedPatient, ...department.patients] };
+        });
+      });
     }
     addLocalAudit(`Appointment ${status.toLowerCase()}`, `${currentUser.name} ${status.toLowerCase()} ${target?.title || "appointment request"}.`, "Important");
     setNotifications((current) => [
@@ -1055,60 +1179,95 @@ export default function App() {
             </View>
 
           <View style={styles.authCard}>
-            <Text style={styles.loginTitle}>{authMode === "login" ? "Sign in" : "Create account"}</Text>
-            <Text style={styles.loginSubtitle}>Use your portal credentials to continue.</Text>
+            <Text style={styles.loginTitle}>{authMode === "forgot" ? "Reset password" : authMode === "login" ? "Sign in" : "Create account"}</Text>
+            <Text style={styles.loginSubtitle}>
+              {authMode === "forgot" ? "Verify your account and set a new password." : "Use your portal credentials to continue."}
+            </Text>
 
-            <View style={styles.segment}>
-              {["login", "register"].map((mode) => (
-                <TouchableOpacity
-                  key={mode}
-                  style={[styles.segmentButton, authMode === mode && styles.segmentButtonActive]}
-                  onPress={() => {
-                    setAuthMode(mode);
-                    setAuthError("");
-                  }}
-                >
-                  <Text style={[styles.segmentText, authMode === mode && styles.segmentTextActive]}>
-                    {mode === "login" ? "Login" : "Register"}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {authMode === "register" && (
-              <Field label="Full name" value={form.name} onChangeText={(value) => updateForm("name", value)} placeholder="Your name" />
-            )}
-            <Field label="Email" value={form.email} onChangeText={(value) => updateForm("email", value)} placeholder="name@example.com" />
-            <Field
-              label="Password"
-              value={form.password}
-              onChangeText={(value) => updateForm("password", value)}
-              placeholder="At least 6 characters"
-              secureTextEntry
-            />
-
-            {authMode === "register" && (
-              <View>
-                <Text style={styles.inputLabel}>Role</Text>
-                <View style={styles.roleGrid}>
-                  {["Patient", "Provider", "Admin"].map((option) => (
-                    <TouchableOpacity
-                      key={option}
-                      style={[styles.rolePill, form.role === option && styles.rolePillActive]}
-                      onPress={() => updateForm("role", option)}
-                    >
-                      <Text style={[styles.rolePillText, form.role === option && styles.rolePillTextActive]}>{option}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+            {authMode !== "forgot" && (
+              <View style={styles.segment}>
+                {["login", "register"].map((mode) => (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[styles.segmentButton, authMode === mode && styles.segmentButtonActive]}
+                    onPress={() => switchAuthMode(mode)}
+                  >
+                    <Text style={[styles.segmentText, authMode === mode && styles.segmentTextActive]}>
+                      {mode === "login" ? "Login" : "Register"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             )}
 
+            {authMode === "forgot" ? (
+              <>
+                <Field label="Account email" value={resetForm.email} onChangeText={(value) => updateResetForm("email", value)} placeholder="name@example.com" />
+                <TouchableOpacity style={styles.secondaryButton} onPress={requestPasswordReset}>
+                  <Text style={styles.secondaryButtonText}>Get Reset Code</Text>
+                </TouchableOpacity>
+                <Field label="Reset code" value={resetForm.code} onChangeText={(value) => updateResetForm("code", value)} placeholder="6-digit code" keyboardType="number-pad" />
+                <Field
+                  label="New password"
+                  value={resetForm.password}
+                  onChangeText={(value) => updateResetForm("password", value)}
+                  placeholder="At least 6 characters"
+                  secureTextEntry
+                />
+              </>
+            ) : (
+              <>
+                {authMode === "register" && (
+                  <Field label="Full name" value={form.name} onChangeText={(value) => updateForm("name", value)} placeholder="Your name" />
+                )}
+                <Field label="Email" value={form.email} onChangeText={(value) => updateForm("email", value)} placeholder="name@example.com" />
+                <Field
+                  label="Password"
+                  value={form.password}
+                  onChangeText={(value) => updateForm("password", value)}
+                  placeholder="At least 6 characters"
+                  secureTextEntry
+                />
+
+                {authMode === "register" && (
+                  <View>
+                    <Text style={styles.inputLabel}>Role</Text>
+                    <View style={styles.roleGrid}>
+                      {["Patient", "Provider", "Admin"].map((option) => (
+                        <TouchableOpacity
+                          key={option}
+                          style={[styles.rolePill, form.role === option && styles.rolePillActive]}
+                          onPress={() => updateForm("role", option)}
+                        >
+                          <Text style={[styles.rolePillText, form.role === option && styles.rolePillTextActive]}>{option}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
+
+            {authNotice ? <Text style={styles.successText}>{authNotice}</Text> : null}
             {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
 
-            <TouchableOpacity style={styles.primaryButton} onPress={handleAuth}>
-              <Text style={styles.primaryButtonText}>{authMode === "login" ? "Enter Secure Portal" : "Create Secure Account"}</Text>
+            <TouchableOpacity style={styles.primaryButton} onPress={authMode === "forgot" ? completePasswordReset : handleAuth}>
+              <Text style={styles.primaryButtonText}>
+                {authMode === "forgot" ? "Update Password" : authMode === "login" ? "Enter Secure Portal" : "Create Secure Account"}
+              </Text>
             </TouchableOpacity>
+
+            {authMode === "login" ? (
+              <TouchableOpacity style={styles.textButton} onPress={() => switchAuthMode("forgot")}>
+                <Text style={styles.textButtonText}>Forgot password?</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {authMode === "forgot" ? (
+              <TouchableOpacity style={styles.textButton} onPress={() => switchAuthMode("login")}>
+                <Text style={styles.textButtonText}>Back to sign in</Text>
+              </TouchableOpacity>
+            ) : null}
 
             <View style={styles.accessNotice}>
               <Text style={styles.accessNoticeTitle}>Authorized access only</Text>
@@ -1242,7 +1401,18 @@ export default function App() {
             />
           )}
           {activeTab === "Messages" && (
-            <MessagesView messageDraft={messageDraft} messages={visibleMessages} notifications={visibleNotifications} role={role} sendMessage={sendMessage} setMessageDraft={setMessageDraft} />
+            <MessagesView
+              currentUser={currentUser}
+              departments={scopedDepartments}
+              messageDraft={messageDraft}
+              messageForm={messageForm}
+              messages={visibleMessages}
+              notifications={visibleNotifications}
+              role={role}
+              sendMessage={sendMessage}
+              setMessageDraft={setMessageDraft}
+              setMessageForm={setMessageForm}
+            />
           )}
           {activeTab === "Records" && (
             <RecordsView
