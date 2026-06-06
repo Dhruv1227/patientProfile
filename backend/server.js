@@ -939,6 +939,31 @@ app.post("/api/auth/reset-password", async (req, res) => {
   res.json({ message: "Password updated. You can sign in with the new password." });
 });
 
+app.patch("/api/auth/change-password", requireAuth, async (req, res) => {
+  const currentPassword = String(req.body.currentPassword || "");
+  const newPassword = String(req.body.newPassword || "");
+
+  if (!currentPassword || newPassword.length < 6) {
+    return res.status(400).json({ message: "Enter your current password and a new password with at least 6 characters." });
+  }
+
+  const currentMatches = await bcrypt.compare(currentPassword, req.user.passwordHash);
+  if (!currentMatches) {
+    addAuditLog(req.user, "Password change failed", `${req.user.email} entered an incorrect current password.`, "Warning");
+    queueSave();
+    return res.status(400).json({ message: "Current password is incorrect." });
+  }
+
+  if (await bcrypt.compare(newPassword, req.user.passwordHash)) {
+    return res.status(400).json({ message: "Choose a new password that is different from the current password." });
+  }
+
+  req.user.passwordHash = await bcrypt.hash(newPassword, 10);
+  addAuditLog(req.user, "Password changed", `${req.user.email} changed their portal password.`, "Critical");
+  queueSave();
+  res.json({ message: "Password changed successfully." });
+});
+
 app.post("/api/auth/register", async (req, res) => {
   const name = String(req.body.name || "").trim();
   const email = String(req.body.email || "").trim().toLowerCase();

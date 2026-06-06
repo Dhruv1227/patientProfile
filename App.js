@@ -80,6 +80,13 @@ export default function App() {
     code: "",
     password: ""
   });
+  const [passwordChangeForm, setPasswordChangeForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
+  });
+  const [passwordChangeNotice, setPasswordChangeNotice] = useState("");
+  const [passwordChangeError, setPasswordChangeError] = useState("");
   const [activeTab, setActiveTab] = useState(initialPortalTab);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
@@ -311,6 +318,12 @@ export default function App() {
     setResetForm((current) => ({ ...current, [key]: value }));
   }
 
+  function updatePasswordChangeForm(key, value) {
+    setPasswordChangeForm((current) => ({ ...current, [key]: value }));
+    setPasswordChangeNotice("");
+    setPasswordChangeError("");
+  }
+
   function switchAuthMode(mode) {
     setAuthMode(mode);
     setAuthError("");
@@ -438,6 +451,43 @@ export default function App() {
     } catch (error) {
       setApiStatus("Offline continuity mode");
       setAuthError(isNetworkError(error) ? "Password reset needs the backend server running." : error.message || "Password could not be reset.");
+    }
+  }
+
+  async function changePassword() {
+    setPasswordChangeNotice("");
+    setPasswordChangeError("");
+
+    if (!authToken) {
+      setPasswordChangeError("Password changes require a secure backend session. Start the backend and sign in again.");
+      return;
+    }
+
+    if (!passwordChangeForm.currentPassword || passwordChangeForm.newPassword.length < 6) {
+      setPasswordChangeError("Enter your current password and a new password with at least 6 characters.");
+      return;
+    }
+
+    if (passwordChangeForm.newPassword !== passwordChangeForm.confirmPassword) {
+      setPasswordChangeError("New password and confirmation do not match.");
+      return;
+    }
+
+    try {
+      const data = await apiRequest("/api/auth/change-password", {
+        method: "PATCH",
+        token: authToken,
+        body: {
+          currentPassword: passwordChangeForm.currentPassword,
+          newPassword: passwordChangeForm.newPassword
+        }
+      });
+      setPasswordChangeForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      setPasswordChangeNotice(data.message || "Password changed successfully.");
+      setApiStatus("Password changed");
+      await loadPortal(authToken, { syncProfileDraft: false });
+    } catch (error) {
+      setPasswordChangeError(isNetworkError(error) ? "Password change needs the backend server running." : error.message || "Password could not be changed.");
     }
   }
 
@@ -1453,6 +1503,11 @@ export default function App() {
               setMasked={setMasked}
               mfaEnabled={mfaEnabled}
               setMfaEnabled={setMfaEnabled}
+              passwordChangeForm={passwordChangeForm}
+              passwordChangeNotice={passwordChangeNotice}
+              passwordChangeError={passwordChangeError}
+              setPasswordChangeForm={updatePasswordChangeForm}
+              changePassword={changePassword}
             />
           )}
           {activeTab === "Admin" && (

@@ -636,7 +636,20 @@ function SearchView({ filter, filteredItems, query, setFilter, setQuery }) {
   );
 }
 
-function SecurityView({ currentUser, auditLogs, masked, role, setMasked, mfaEnabled, setMfaEnabled }) {
+function SecurityView({
+  currentUser,
+  auditLogs,
+  masked,
+  role,
+  setMasked,
+  mfaEnabled,
+  setMfaEnabled,
+  passwordChangeForm,
+  passwordChangeNotice,
+  passwordChangeError,
+  setPasswordChangeForm,
+  changePassword
+}) {
   return (
     <View style={styles.screen}>
       <PageHeader title="Security Center" subtitle="Real-world portal controls for protected health information and role-based access." />
@@ -654,6 +667,39 @@ function SecurityView({ currentUser, auditLogs, masked, role, setMasked, mfaEnab
         <ToggleRow title="Privacy masking" detail="Hide protected health information on shared screens." enabled={masked} onPress={() => setMasked(!masked)} />
         <ToggleRow title="Auto-lock session" detail="Lock portal access after 10 minutes of inactivity." enabled />
         <ToggleRow title="Emergency access audit" detail="Record any break-glass access to sensitive charts." enabled />
+      </View>
+      <View style={styles.panel}>
+        <View style={styles.panelHeader}>
+          <Text style={styles.panelTitle}>Change Password</Text>
+          <Text style={styles.tag}>{currentUser.role}</Text>
+        </View>
+        <Text style={styles.recordDetail}>Update the password for {currentUser.email}. The current password is required before the new password is saved.</Text>
+        <Field
+          label="Current password"
+          value={passwordChangeForm.currentPassword}
+          onChangeText={(value) => setPasswordChangeForm("currentPassword", value)}
+          placeholder="Enter current password"
+          secureTextEntry
+        />
+        <Field
+          label="New password"
+          value={passwordChangeForm.newPassword}
+          onChangeText={(value) => setPasswordChangeForm("newPassword", value)}
+          placeholder="At least 6 characters"
+          secureTextEntry
+        />
+        <Field
+          label="Confirm new password"
+          value={passwordChangeForm.confirmPassword}
+          onChangeText={(value) => setPasswordChangeForm("confirmPassword", value)}
+          placeholder="Re-enter new password"
+          secureTextEntry
+        />
+        {passwordChangeNotice ? <Text style={styles.successText}>{passwordChangeNotice}</Text> : null}
+        {passwordChangeError ? <Text style={styles.errorText}>{passwordChangeError}</Text> : null}
+        <TouchableOpacity style={styles.primaryButton} onPress={changePassword}>
+          <Text style={styles.primaryButtonText}>Update Password</Text>
+        </TouchableOpacity>
       </View>
       {role === "Admin" ? (
         <Panel

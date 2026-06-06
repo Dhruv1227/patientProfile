@@ -59,6 +59,7 @@ For a presentation, this sequence shows the connected workflow clearly:
 - Secure login backed by JWT authentication
 - Password hashing with bcrypt
 - Forgot password flow with a one-time 6-digit demo reset code
+- Logged-in password change from the Security Center
 - Browser session restore after refresh
 - Live portal data refresh every 10 seconds after login
 - Inactivity auto-lock for security
@@ -268,11 +269,13 @@ Admin: admin@care.test
 
 The full list of seeded doctor and patient accounts is available in [DEMO_CREDENTIALS.md](DEMO_CREDENTIALS.md).
 
-## Password Reset
+## Password Reset and Change Password
 
 The login screen includes a Forgot password flow. For this local demo, the backend generates a 6-digit reset code, stores only a hashed version, expires it after 10 minutes, and shows the code on screen so the reset can be demonstrated without connecting an email or SMS service.
 
 In a production version, that same code should be delivered through email or SMS instead of being displayed in the app.
+
+Signed-in users can also change their password from the Security Center. The backend requires the current password, hashes the new password, saves it through the configured portal storage, and records the change in the admin audit log.
 
 ## API Routes
 
@@ -282,6 +285,7 @@ POST   /api/auth/login
 POST   /api/auth/register
 POST   /api/auth/forgot-password
 POST   /api/auth/reset-password
+PATCH  /api/auth/change-password
 GET    /api/portal
 GET    /api/search
 GET    /api/audit-logs
