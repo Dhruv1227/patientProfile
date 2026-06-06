@@ -216,9 +216,39 @@ PORT=4000
 JWT_SECRET=replace-with-a-long-random-secret
 DATA_FILE=backend/data/portal-state.json
 EXPO_PUBLIC_API_URL=http://localhost:4000
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_PORTAL_TABLE=portal_state
+SUPABASE_PORTAL_ROW_ID=carebridge-local
 ```
 
-Runtime state is saved in `backend/data/portal-state.json`. That file is ignored by git so local testing does not overwrite the clean demo state in the repository.
+## Supabase Storage
+
+CareBridge can store the portal data in Supabase. The backend saves one JSONB portal snapshot containing users, departments, patients, appointments, messages, transfers, admin approval requests, and audit logs.
+
+To enable Supabase:
+
+1. Create a Supabase project.
+2. Open the Supabase SQL editor and run [docs/SUPABASE_SETUP.sql](docs/SUPABASE_SETUP.sql).
+3. Copy `.env.example` to `.env`.
+4. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env`.
+5. Start the backend with `npm run backend`.
+
+Check the active storage mode:
+
+```bash
+curl http://localhost:4000/api/health
+```
+
+When Supabase is configured, the response includes:
+
+```json
+{
+  "storage": "Supabase"
+}
+```
+
+If Supabase keys are not present, the app falls back to `backend/data/portal-state.json` for local demos. That file is ignored by git so local testing does not overwrite the clean demo state in the repository.
 
 ## Demo Logins
 

@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { createSupabasePortalStore } = require("./storage/supabasePortalStore");
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -27,6 +28,7 @@ const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || "carebridge-local-development-secret";
 const DATA_FILE = path.resolve(process.cwd(), process.env.DATA_FILE || path.join("backend", "data", "portal-state.json"));
 const STATE_VERSION = 1;
+const portalStore = createSupabasePortalStore();
 
 app.use(cors());
 app.use(express.json());
@@ -153,10 +155,15 @@ function serializableState() {
   };
 }
 
-function saveStateNow() {
+async function saveStateNow() {
   if (!persistenceReady) return;
 
   try {
+    if (portalStore) {
+      await portalStore.save(serializableState());
+      return;
+    }
+
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
     const tempFile = `${DATA_FILE}.tmp`;
     fs.writeFileSync(tempFile, JSON.stringify(serializableState(), null, 2));
@@ -169,7 +176,9 @@ function saveStateNow() {
 function queueSave() {
   if (!persistenceReady) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveStateNow, 50);
+  saveTimer = setTimeout(() => {
+    saveStateNow();
+  }, 50);
 }
 
 function createPasswordResetCode() {
@@ -492,38 +501,53 @@ function ensureClinicalCoverage() {
 
 initializeClinicalState();
 
+function applyPersistedState(state) {
+  if (!state || typeof state !== "object") return false;
+
+  if (Array.isArray(state.users)) {
+    users.splice(0, users.length, ...state.users);
+  }
+  if (Array.isArray(state.appointments)) appointments = state.appointments;
+  if (Array.isArray(state.messages)) messages = normalizeMessages(state.messages);
+  if (Array.isArray(state.notifications)) notifications = state.notifications;
+  if (state.patientProfile && typeof state.patientProfile === "object") patientProfile = state.patientProfile;
+  if (state.patientProfiles && typeof state.patientProfiles === "object") patientProfiles = { ...patientProfiles, ...state.patientProfiles };
+  if (Array.isArray(state.patientRecords)) patientRecords = state.patientRecords;
+  if (Array.isArray(state.transfers)) transfers = state.transfers;
+  if (Array.isArray(state.adminApprovalRequests)) adminApprovalRequests = state.adminApprovalRequests;
+  if (Array.isArray(state.auditLogs)) auditLogs = state.auditLogs;
+  if (Array.isArray(state.departments)) departments = state.departments;
+  if (state.doctorSchedules && typeof state.doctorSchedules === "object") doctorSchedules = state.doctorSchedules;
+  return true;
+}
+
 function hydrateFromDisk() {
   if (!fs.existsSync(DATA_FILE)) return false;
 
   try {
-    const state = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    if (!state || typeof state !== "object") return false;
-
-    if (Array.isArray(state.users)) {
-      users.splice(0, users.length, ...state.users);
-    }
-    if (Array.isArray(state.appointments)) appointments = state.appointments;
-    if (Array.isArray(state.messages)) messages = normalizeMessages(state.messages);
-    if (Array.isArray(state.notifications)) notifications = state.notifications;
-    if (state.patientProfile && typeof state.patientProfile === "object") patientProfile = state.patientProfile;
-    if (state.patientProfiles && typeof state.patientProfiles === "object") patientProfiles = { ...patientProfiles, ...state.patientProfiles };
-    if (Array.isArray(state.patientRecords)) patientRecords = state.patientRecords;
-    if (Array.isArray(state.transfers)) transfers = state.transfers;
-    if (Array.isArray(state.adminApprovalRequests)) adminApprovalRequests = state.adminApprovalRequests;
-    if (Array.isArray(state.auditLogs)) auditLogs = state.auditLogs;
-    if (Array.isArray(state.departments)) departments = state.departments;
-    if (state.doctorSchedules && typeof state.doctorSchedules === "object") doctorSchedules = state.doctorSchedules;
-    return true;
+    return applyPersistedState(JSON.parse(fs.readFileSync(DATA_FILE, "utf8")));
   } catch (error) {
-    console.warn(`Unable to load portal state. Seed data will be used. ${error.message}`);
+    console.warn(`Unable to load local portal state. Seed data will be used. ${error.message}`);
     return false;
   }
 }
 
-const restoredState = hydrateFromDisk();
-ensureClinicalCoverage();
-persistenceReady = true;
-if (!restoredState) saveStateNow();
+async function hydratePersistedState() {
+  if (portalStore) {
+    try {
+      const state = await portalStore.load();
+      if (applyPersistedState(state)) return { restored: true, source: `${portalStore.name} table ${portalStore.table}` };
+      return { restored: false, source: `${portalStore.name} table ${portalStore.table}` };
+    } catch (error) {
+      console.warn(`Unable to load Supabase portal state. Falling back to local state. ${error.message}`);
+    }
+  }
+
+  return {
+    restored: hydrateFromDisk(),
+    source: `local file ${DATA_FILE}`
+  };
+}
 
 function publicUser(user) {
   const { passwordHash, ...safeUser } = user;
@@ -811,7 +835,12 @@ function scopedPortalData(user) {
 }
 
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "CareBridge API", time: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    service: "CareBridge API",
+    storage: portalStore ? "Supabase" : "Local JSON",
+    time: new Date().toISOString()
+  });
 });
 
 app.post("/api/auth/login", async (req, res) => {
@@ -1682,12 +1711,26 @@ app.post("/api/messages", requireAuth, (req, res) => {
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.once(signal, () => {
-    saveStateNow();
-    process.exit(0);
+    saveStateNow().finally(() => process.exit(0));
   });
 }
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`CareBridge API running on http://localhost:${PORT}`);
-  console.log(`Portal state file: ${DATA_FILE}`);
+async function startServer() {
+  const restoredState = await hydratePersistedState();
+  ensureClinicalCoverage();
+  persistenceReady = true;
+  if (!restoredState.restored) await saveStateNow();
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`CareBridge API running on http://localhost:${PORT}`);
+    console.log(`Portal storage: ${restoredState.source}`);
+    if (portalStore) {
+      console.log(`Supabase row id: ${portalStore.rowId}`);
+    }
+  });
+}
+
+startServer().catch((error) => {
+  console.error(`CareBridge API failed to start: ${error.message}`);
+  process.exit(1);
 });

@@ -13,13 +13,15 @@
     "check:api": "node --check backend/server.js",
     "build:web": "expo export -p web",
     "screenshots": "npm run build:web && node tools/capture-screenshots.mjs",
-    "test:workflows": "npm run check:api && npm run build:web"
+    "test:workflows": "npm run check:api && npm run build:web",
+    "demo:video": "node tools/create-demo-video.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
+    "@supabase/supabase-js": "^2.107.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
-    "expo": "~54.0.0",
+    "expo": "~54.0.35",
     "expo-status-bar": "~3.0.9",
     "express": "^5.2.1",
     "inline-style-prefixer": "^6.0.4",
@@ -30,6 +32,7 @@
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2"
+    "@babel/core": "^7.25.2",
+    "babel-preset-expo": "~54.0.8"
   }
 }
