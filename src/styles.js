@@ -725,34 +725,6 @@ export const styles = StyleSheet.create({
   cardList: {
     gap: 10
   },
-  securityScore: {
-    backgroundColor: palette.ink,
-    borderRadius: 8,
-    padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-    alignItems: "center"
-  },
-  securityScoreLabel: {
-    color: "#b8c8c4",
-    fontWeight: "900"
-  },
-  securityScoreValue: {
-    color: "#ffffff",
-    fontSize: 36,
-    fontWeight: "900"
-  },
-  complianceBadge: {
-    backgroundColor: "#d8f6ef",
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10
-  },
-  complianceText: {
-    color: palette.tealDark,
-    fontWeight: "900"
-  },
   securityGrid: {
     gap: 10
   },

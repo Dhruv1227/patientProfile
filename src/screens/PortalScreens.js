@@ -653,15 +653,6 @@ function SecurityView({
   return (
     <View style={styles.screen}>
       <PageHeader title="Security Center" subtitle="Real-world portal controls for protected health information and role-based access." />
-      <View style={styles.securityScore}>
-        <View>
-          <Text style={styles.securityScoreLabel}>Security posture</Text>
-          <Text style={styles.securityScoreValue}>98%</Text>
-        </View>
-        <View style={styles.complianceBadge}>
-          <Text style={styles.complianceText}>HIPAA-ready controls</Text>
-        </View>
-      </View>
       <View style={styles.securityGrid}>
         <ToggleRow title="Multi-factor authentication" detail="Require an extra verification step at sign in." enabled={mfaEnabled} onPress={() => setMfaEnabled(!mfaEnabled)} />
         <ToggleRow title="Privacy masking" detail="Hide protected health information on shared screens." enabled={masked} onPress={() => setMasked(!masked)} />
